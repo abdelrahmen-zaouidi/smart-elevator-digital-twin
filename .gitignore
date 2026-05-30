@@ -1,0 +1,59 @@
+# Secrets — never commit the live .env; commit only .env.example
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Next.js / local env overrides (never commit)
+.env.local
+**/.env.local
+
+# Firmware secrets (commit only the .example template)
+secrets.h
+**/secrets.h
+!**/secrets.h.example
+
+# MQTT broker auth + TLS private material (commit only templates/scripts)
+mosquitto_config/passwordfile
+mosquitto_config/certs/
+*.key
+*.pem
+*.crt
+*.p12
+*.pfx
+*.csr
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+runtime/
+
+# Node / frontend build output
+node_modules/
+.next/
+.vercel/
+dist/
+build/
+out/
+coverage/
+
+# Logs / temp / cache
+*.log
+*.log.*
+logs/
+tmp/
+temp/
+.cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

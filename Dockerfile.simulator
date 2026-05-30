@@ -1,0 +1,22 @@
+FROM python:3.11-slim
+WORKDIR /app
+
+# Create non-root user
+RUN groupadd -r app && useradd -r -g app app
+
+# Install dependencies with no cache
+RUN pip install --no-cache-dir --no-deps paho-mqtt
+
+# Copy app files and set ownership
+COPY --chown=app:app esp32_simulator.py .
+RUN mkdir -p runtime && chown -R app:app runtime
+
+# Security: use non-root user
+USER app
+
+# Health check (app writes to runtime)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD test -f runtime/.health || exit 1
+
+# -u: unbuffered output so logs appear immediately in docker logs
+CMD ["python", "-u", "esp32_simulator.py"]

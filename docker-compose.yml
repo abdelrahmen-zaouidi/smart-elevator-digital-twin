@@ -1,0 +1,336 @@
+services:
+  mosquitto:
+    image: eclipse-mosquitto:2
+    container_name: elevator-mqtt
+    # Whole config dir is mounted (robust on Docker Desktop) and the broker is
+    # pointed at elevator.conf explicitly. 8883 = TLS listener for the ESP32.
+    command: ["mosquitto", "-c", "/mosquitto/config/elevator.conf"]
+    ports:
+      - "1883:1883"
+      - "8883:8883"
+      - "9001:9001"
+    environment:
+      # Used only by the container's own healthcheck (publish-only ACL user).
+      - MQTT_HEALTHCHECK_PASSWORD=${MQTT_HEALTHCHECK_PASSWORD:-}
+    volumes:
+      - ./mosquitto_config:/mosquitto/config:ro
+    restart: on-failure:5
+    healthcheck:
+      # Anonymous is now disabled, so the healthcheck authenticates as the
+      # dedicated publish-only 'healthcheck' user.
+      test: ["CMD-SHELL", "mosquitto_pub -h localhost -p 1883 -u healthcheck -P \"$$MQTT_HEALTHCHECK_PASSWORD\" -t healthcheck/mqtt -m ping || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - default
+      - ditto_network
+
+  bridge:
+    build:
+      context: .
+      dockerfile: Dockerfile.bridge
+    container_name: elevator_bridge
+    environment:
+      - MQTT_URL=mqtt://mosquitto:1883
+      # Broker credentials (anonymous is disabled on the broker). Intra-Docker
+      # hop stays plaintext 1883; auth + ACL still enforced.
+      - MQTT_USERNAME=${MQTT_BRIDGE_USERNAME:-bridge}
+      - MQTT_PASSWORD=${MQTT_BRIDGE_PASSWORD:-}
+      # Canonical fleet-wide subscriptions: elevator/+/{telemetry,events,status}
+      - MQTT_TELEMETRY_SUBSCRIPTION=${MQTT_TELEMETRY_SUBSCRIPTION:-elevator/+/telemetry}
+      - MQTT_EVENTS_SUBSCRIPTION=${MQTT_EVENTS_SUBSCRIPTION:-elevator/+/events}
+      - MQTT_STATUS_SUBSCRIPTION=${MQTT_STATUS_SUBSCRIPTION:-elevator/+/status}
+      - DITTO_URL=${DITTO_BASE_URL:-http://docker-nginx-1}
+      - THING_ID=${PRIMARY_THING_ID:-building:floor1:elevator}
+      - PRIMARY_MQTT_ID=${PRIMARY_MQTT_ID:-building-floor1-elevator}
+      - DITTO_USER=${DITTO_USERNAME:-ditto}
+      - DITTO_PASSWORD=${DITTO_PASSWORD:-ditto}
+      - MICROCONTROLLER_TELEMETRY_HEARTBEAT_MS=${MICROCONTROLLER_TELEMETRY_HEARTBEAT_MS:-5000}
+      - MICROCONTROLLER_OFFLINE_AFTER_MS=${MICROCONTROLLER_OFFLINE_AFTER_MS:-15000}
+      - NODE_ENV=production
+    restart: on-failure:5
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/node_modules/.cache
+    networks:
+      - default
+      - ditto_network
+
+  simulator:
+    build:
+      context: .
+      dockerfile: Dockerfile.simulator
+    container_name: elevator_simulator
+    # OFF by default: the simulator is opt-in via the "simulator" profile so
+    # `docker compose up -d` brings up the platform (mosquitto/bridge/ditto/n8n/postgres)
+    # without injecting synthetic telemetry. Start it explicitly when needed:
+    #   docker compose --profile simulator up -d simulator
+    profiles: ["simulator"]
+    environment:
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
+      - THING_ID=${PRIMARY_THING_ID:-building:floor1:elevator}
+      - PRIMARY_MQTT_ID=${PRIMARY_MQTT_ID:-building-floor1-elevator}
+      # If MQTT_TOPIC is unset the simulator derives it from THING_ID via
+      # the canonical helper buildTelemetryTopic(thing_id) in esp32_simulator.py.
+      - MQTT_TOPIC=${MQTT_TELEMETRY_TOPIC:-}
+      - MQTT_EVENTS_TOPIC=${MQTT_EVENTS_TOPIC:-}
+      - MQTT_STATUS_TOPIC=${MQTT_STATUS_TOPIC:-}
+      - PUBLISH_INTERVAL_S=${SIMULATOR_PUBLISH_INTERVAL_S:-3}
+      - SIM_ANOMALY_PROFILE=${SIM_ANOMALY_PROFILE:-normal}
+      - SIM_EMERGENCY_AUTO_CLEAR=${SIM_EMERGENCY_AUTO_CLEAR:-false}
+      - SIM_DEMO_AUTO_CLEAR_S=${SIM_DEMO_AUTO_CLEAR_S:-90}
+      - SIM_RANDOM_SEED=${SIM_RANDOM_SEED:-}
+      - SIM_PHYSICS_STEP_S=${SIM_PHYSICS_STEP_S:-0.1}
+      - SIM_LOG_LEVEL=${SIM_LOG_LEVEL:-INFO}
+    # /app/runtime holds the live-twin snapshot, which is rewritten every
+    # tick. The image already creates it with `app:app` ownership; mounting
+    # anything here (named volume or default tmpfs) overlays it with a
+    # root-owned filesystem and breaks writes from the non-root simulator.
+    restart: on-failure:5
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - default
+
+  n8n:
+    image: docker.n8n.io/n8nio/n8n
+    container_name: elevator_agents
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=${N8N_HOST:-0.0.0.0}
+      - N8N_PORT=${N8N_PORT:-5678}
+      - N8N_PROTOCOL=${N8N_PROTOCOL:-http}
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=${N8N_BLOCK_ENV_ACCESS_IN_NODE:-false}
+      - WEBHOOK_URL=${WEBHOOK_URL:-http://localhost:5678/}
+      - NODE_ENV=production
+      - DITTO_BASE_URL=${DITTO_BASE_URL:-http://docker-nginx-1}
+      - DITTO_PUBLIC_BASE_URL=${DITTO_PUBLIC_BASE_URL:-http://localhost}
+      - DITTO_USERNAME=${DITTO_USERNAME:-ditto}
+      - DITTO_PASSWORD=${DITTO_PASSWORD:-ditto}
+      - PRIMARY_THING_ID=${PRIMARY_THING_ID:-building:floor1:elevator}
+      - PRIMARY_MQTT_ID=${PRIMARY_MQTT_ID:-building-floor1-elevator}
+      - ELEVATOR_FLEET_IDS=${ELEVATOR_FLEET_IDS:-building:floor1:elevator}
+      - DASHBOARD_URL=${DASHBOARD_URL:-http://localhost:3000}
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
+      # Broker credentials for the 'agents' identity (publish/subscribe commands).
+      # NOTE: n8n MQTT *nodes* read credentials from n8n's own credential store
+      # (set them once in the n8n UI). These env vars are for reference / any
+      # workflow that reads them via expressions.
+      - MQTT_USERNAME=${MQTT_AGENTS_USERNAME:-agents}
+      - MQTT_PASSWORD=${MQTT_AGENTS_PASSWORD:-}
+      # Canonical MQTT topic convention propagated to n8n workflows.
+      - MQTT_TELEMETRY_TOPIC=${MQTT_TELEMETRY_TOPIC:-elevator/building-floor1-elevator/telemetry}
+      - MQTT_EVENTS_TOPIC=${MQTT_EVENTS_TOPIC:-elevator/building-floor1-elevator/events}
+      - MQTT_COMMANDS_TOPIC=${MQTT_COMMANDS_TOPIC:-elevator/building-floor1-elevator/commands}
+      - MQTT_STATUS_TOPIC=${MQTT_STATUS_TOPIC:-elevator/building-floor1-elevator/status}
+      - MQTT_TELEMETRY_SUBSCRIPTION=${MQTT_TELEMETRY_SUBSCRIPTION:-elevator/+/telemetry}
+      - MQTT_EVENTS_SUBSCRIPTION=${MQTT_EVENTS_SUBSCRIPTION:-elevator/+/events}
+      - MQTT_COMMANDS_SUBSCRIPTION=${MQTT_COMMANDS_SUBSCRIPTION:-elevator/+/commands}
+      - MQTT_STATUS_SUBSCRIPTION=${MQTT_STATUS_SUBSCRIPTION:-elevator/+/status}
+      - LOCAL_LLM_ENABLED=${LOCAL_LLM_ENABLED:-false}
+      - LOCAL_LLM_URL=${LOCAL_LLM_URL:-http://ollama:11434}
+      - LOCAL_LLM_MODEL=${LOCAL_LLM_MODEL:-llama3.2}
+      - MAX_RISK_AUTO_CONTROL=${MAX_RISK_AUTO_CONTROL:-70}
+      - MAX_RISK_OPERATOR_CONTROL=${MAX_RISK_OPERATOR_CONTROL:-85}
+      - MAX_TWIN_AGE_SECONDS=${MAX_TWIN_AGE_SECONDS:-10}
+      - COMMAND_COOLDOWN_SECONDS=${COMMAND_COOLDOWN_SECONDS:-3}
+      - COMMAND_REQUIRE_REASON=${COMMAND_REQUIRE_REASON:-true}
+      - COMMAND_AUDIT_ENABLED=${COMMAND_AUDIT_ENABLED:-true}
+      - MAINTENANCE_SCAN_INTERVAL_HOURS=${MAINTENANCE_SCAN_INTERVAL_HOURS:-6}
+      - NOTIFICATION_ESCALATION_MINUTES=${NOTIFICATION_ESCALATION_MINUTES:-15}
+      - NOTIFICATION_DEDUPE_MINUTES=${NOTIFICATION_DEDUPE_MINUTES:-5}
+      - RFID_FAILURE_WINDOW_MINUTES=${RFID_FAILURE_WINDOW_MINUTES:-5}
+      - RFID_BLACKLIST_THRESHOLD=${RFID_BLACKLIST_THRESHOLD:-3}
+      - MIN_FLOOR=${MIN_FLOOR:-0}
+      - MAX_FLOOR=${MAX_FLOOR:-3}
+      - GROUND_FLOOR=${GROUND_FLOOR:-0}
+      - TELEGRAM_ENABLED=${TELEGRAM_ENABLED:-false}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID:-}
+      - EMAIL_ENABLED=${EMAIL_ENABLED:-false}
+      - EMAIL_SMTP_HOST=${EMAIL_SMTP_HOST:-}
+      - EMAIL_SMTP_PORT=${EMAIL_SMTP_PORT:-587}
+      - EMAIL_SMTP_USER=${EMAIL_SMTP_USER:-}
+      - EMAIL_SMTP_PASSWORD=${EMAIL_SMTP_PASSWORD:-}
+      - EMAIL_FROM=${EMAIL_FROM:-elevator-alerts@localhost}
+      - EMAIL_TO=${EMAIL_TO:-operator@localhost}
+      - SMS_ENABLED=${SMS_ENABLED:-false}
+      - SMS_WEBHOOK_URL=${SMS_WEBHOOK_URL:-}
+      - VOICE_ENABLED=${VOICE_ENABLED:-false}
+      - VOICE_WEBHOOK_URL=${VOICE_WEBHOOK_URL:-}
+      - ALERT_PHONE=${ALERT_PHONE:-}
+      - POSTGRES_HOST=${POSTGRES_HOST:-postgres}
+      - POSTGRES_PORT=${POSTGRES_PORT:-5432}
+      - POSTGRES_DB=${POSTGRES_DB:-smart_building}
+      - POSTGRES_USER=${POSTGRES_USER:-admin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-change_me_local_only}
+      - LLM_API_URL=${LOCAL_LLM_URL:-http://ollama:11434}
+      - LLM_API_KEY=${LLM_API_KEY:-}
+      - LLM_MODEL=${LOCAL_LLM_MODEL:-llama3.2}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    restart: on-failure:5
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mosquitto:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
+          cpus: '1'
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - default
+      - ditto_network
+
+  postgres:
+    image: timescale/timescaledb:latest-pg15
+    container_name: elevator_db
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-admin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-change_me_local_only}
+      - POSTGRES_DB=${POSTGRES_DB:-smart_building}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d
+    restart: on-failure:5
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-admin} -d $${POSTGRES_DB:-smart_building}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - ditto_network
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: elevator_ollama
+    profiles: ["ai"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: on-failure:5
+    deploy:
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '2'
+          memory: 2G
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - default
+      - ditto_network
+
+  adminer:
+    image: adminer:latest
+    container_name: elevator_adminer
+    profiles: ["tools"]
+    ports:
+      - "${ADMINER_PORT:-8081}:8080"
+    restart: on-failure:5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - ditto_network
+
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: elevator_grafana
+    profiles: ["observability"]
+    ports:
+      - "${GRAFANA_PORT:-3001}:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    restart: on-failure:5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - ditto_network
+
+volumes:
+  n8n_data:
+  pg_data:
+  ollama_data:
+  grafana_data:
+
+networks:
+  ditto_network:
+    name: docker_default
+    external: true

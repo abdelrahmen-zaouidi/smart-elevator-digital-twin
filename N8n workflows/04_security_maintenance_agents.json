@@ -1,0 +1,605 @@
+{
+  "name": "04_security_maintenance_agents",
+  "nodes": [
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://n8n:5678/webhook/notification-agent",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ thing_id: $('Predictive Maintenance Engine').item.json.work_order.thing_id, severity: 'WARNING', work_order: $('Predictive Maintenance Engine').item.json.work_order, event: $('Predictive Maintenance Engine').item.json, title: 'Predictive maintenance required', message: 'Priority ' + $('Predictive Maintenance Engine').item.json.work_order.priority + ' work order for ' + $('Predictive Maintenance Engine').item.json.work_order.thing_id }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "f4ca875a-c147-4a65-b446-f00385458ba1",
+      "name": "Queue Maintenance Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        320,
+        192
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $('Predictive Maintenance Engine').item.json.work_order.notify_required }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "cfab5848-ee7a-42d2-a132-d097f504763d",
+      "name": "Route: Notify Maintenance?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        96,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ ($env.DITTO_BASE_URL || 'http://docker-nginx-1') + '/api/2/things/' + $('Predictive Maintenance Engine').item.json.work_order.thing_id + '/features/maintenance_schedule' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ properties: { work_order_id: $('Predictive Maintenance Engine').item.json.work_order?.work_order_id, priority: $('Predictive Maintenance Engine').item.json.work_order?.priority, wear_index: $('Predictive Maintenance Engine').item.json.work_order?.wear_index, estimated_failure_days: $('Predictive Maintenance Engine').item.json.work_order?.estimated_failure_days, next_service_date: $('Predictive Maintenance Engine').item.json.work_order?.next_service_date, tasks: $('Predictive Maintenance Engine').item.json.work_order?.tasks, generated_at: $('Predictive Maintenance Engine').item.json.work_order?.generated_at } }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "67663ac5-b7c6-45b9-91e9-e77937085b6d",
+      "name": "Write Maintenance Schedule to Ditto",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -128,
+        192
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "DHKgydzDWawM8nkx",
+          "name": "Authentication"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO maintenance_work_orders (work_order_id, correlation_id, thing_id, issue_key, priority, wear_index, estimated_failure_days, tasks, evidence, status, created_at) VALUES ($1, $2, $3, $4, $5, $6::numeric, $7::integer, $8::jsonb, $9::jsonb, 'OPEN', COALESCE($10::timestamptz, NOW())) ON CONFLICT (thing_id, issue_key) WHERE status IN ('OPEN', 'IN_PROGRESS') DO UPDATE SET priority = EXCLUDED.priority, wear_index = GREATEST(maintenance_work_orders.wear_index, EXCLUDED.wear_index), estimated_failure_days = LEAST(maintenance_work_orders.estimated_failure_days, EXCLUDED.estimated_failure_days), evidence = maintenance_work_orders.evidence || EXCLUDED.evidence;",
+        "options": {
+          "queryReplacement": "={{ [$json.work_order.work_order_id, $json.work_order.correlation_id || $json.correlation_id || '', $json.work_order.thing_id, $json.work_order.issue_key || 'general', $json.work_order.priority || 'LOW', Number($json.work_order.wear_index || 0), Math.round(Number($json.work_order.estimated_failure_days || 30)), JSON.stringify($json.work_order.tasks || []), JSON.stringify($json.work_order.evidence || {}), $json.work_order.generated_at] }}"
+        }
+      },
+      "id": "a1f44e22-3c1a-4b9f-9b51-0d2e1c8b2a01",
+      "name": "Persist Maintenance Work Order",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        -464,
+        288
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "postgres": {
+          "id": "Y3xIBg0WwpRKadx2",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ ($env.DITTO_BASE_URL || 'http://docker-nginx-1') + '/api/2/things/' + $json.work_order.thing_id + '/features/maintenance_schedule' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ properties: {} }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "d28e001d-4034-4359-b3c1-5bce9c47b1ec",
+      "name": "Ensure Maintenance Feature Exists",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -352,
+        192
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "DHKgydzDWawM8nkx",
+          "name": "Authentication"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ ($env.DITTO_BASE_URL || 'http://docker-nginx-1') + '/api/2/things/' + ($env.PRIMARY_THING_ID || 'building:floor1:elevator') }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "cc14420e-7367-4a1a-9099-151620361086",
+      "name": "GET Current Thing for Maintenance",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -1024,
+        96
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "DHKgydzDWawM8nkx",
+          "name": "Authentication"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "id": "ac9fe48d-b888-48df-943b-c6b06769bff4",
+      "name": "Schedule: Maintenance Scan Every 6h",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1248,
+        96
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "maintenance-agent",
+        "options": {}
+      },
+      "id": "90069242-ce48-4730-9e30-2cb9c820a71e",
+      "name": "Webhook: Maintenance Events",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        288
+      ],
+      "webhookId": "maintenance-agent"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://n8n:5678/webhook/notification-agent",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ thing_id: $json.thing_id, severity: $json.security_analysis.severity, event: $json, title: 'Security escalation', message: `Security state ${$json.security_analysis.state} for ${$json.thing_id}` }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "a808524c-f7de-4d62-8104-bc0c3a11e37c",
+      "name": "Queue Security Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -576,
+        -128
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.security_analysis.state }}",
+              "operation": "notEqual",
+              "value2": "NORMAL"
+            }
+          ]
+        }
+      },
+      "id": "e14f8c64-18a7-4cd0-b131-a84b6ca962fc",
+      "name": "Route: Notify Security?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -128
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $input.first().json || {};\nconst sec = event.security_analysis || {};\nconst risk = event.risk_analysis || {};\nconst correlationId = event.correlation_id || `CID-SEC-LOCKDOWN-${(event.thing_id || 'thing').replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`;\nconst issuedAt = sec.analyzed_at || new Date().toISOString();\nreturn [{\n  json: {\n    thing_id: event.thing_id,\n    correlation_id: correlationId,\n    system_mode: event.system_mode || 'NORMAL',\n    payload: event.payload || {},\n    security_analysis: sec,\n    risk_analysis: risk,\n    agent_source: '04_security_maintenance_agents',\n    triggered_action: {\n      agent: 'control',\n      command: 'LOCKDOWN',\n      priority: 'CRITICAL',\n      source_agent: '04_security_maintenance_agents',\n      correlation_id: correlationId,\n      risk_score: Number(risk.risk_score || 0),\n      reason: Array.isArray(sec.combined_events) ? sec.combined_events : [],\n      issued_at: issuedAt\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -576,
+        -416
+      ],
+      "id": "23c780ed-a563-4203-a1ab-4ab0ddfee89d",
+      "name": "Build Lockdown Request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://n8n:5678/webhook/control-agent",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "23c780ed-a563-4203-a1ab-4ab0ddfee89c",
+      "name": "Queue Control Lockdown",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -352,
+        -416
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.security_analysis.state }}",
+              "value2": "LOCKDOWN"
+            }
+          ]
+        }
+      },
+      "id": "690b232c-4e11-45e2-81aa-a773b5bcfc5f",
+      "name": "Route: Lockdown?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -800,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ ($env.DITTO_BASE_URL || 'http://docker-nginx-1') + '/api/2/things/' + $json.thing_id + '/features/security/properties' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ ...($json.payload.security || {}), state: $json.security_analysis.state, alert_level: $json.security_analysis.alert_level, blacklisted_cards: $json.security_analysis.blacklisted_cards, last_review_at: $json.security_analysis.analyzed_at, active_security_incident: $json.security_analysis.active_security_incident, security_recommendation: $json.security_analysis.security_recommendation }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "9dffd6b7-dae2-4448-a812-93f48da4b1a1",
+      "name": "Write Security State to Ditto",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -800,
+        -512
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "DHKgydzDWawM8nkx",
+          "name": "Authentication"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "security-agent",
+        "options": {}
+      },
+      "id": "a4ca0179-8a90-4c18-b5a3-d78b05951297",
+      "name": "Webhook: Security Events",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -1248,
+        -320
+      ],
+      "webhookId": "security-agent"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawEvent = $input.first().json || {};\nconst event = (rawEvent.body && typeof rawEvent.body === 'object' && rawEvent.body.thing_id) ? rawEvent.body : rawEvent;\nconst payload = event.payload || {};\nconst security = payload.security || {};\nconst door = payload.door || {};\nconst cabin = payload.cabin || {};\nconst thingId = event.thing_id || $env.PRIMARY_THING_ID || 'building:floor1:elevator';\nconst now = Date.now();\nconst nowIso = new Date(now).toISOString();\nconst windowMs = Number($env.RFID_FAILURE_WINDOW_MINUTES || 5) * 60 * 1000;\nconst threshold = Number($env.RFID_BLACKLIST_THRESHOLD || 3);\n\nconst state = $getWorkflowStaticData('global');\nconst key = `security:${thingId}`;\nstate[key] = state[key] || {\n  rfid_failures: {},\n  blacklisted_cards: [],\n  active_incidents: []\n};\n\nconst memory = state[key];\nconst card = security.rfid_last_card || '';\n\nif (card && security.rfid_access_granted === false) {\n  const attempts = memory.rfid_failures[card] || [];\n  attempts.push(now);\n  memory.rfid_failures[card] = attempts.filter((ts) => now - ts <= windowMs);\n}\n\nfor (const knownCard of Object.keys(memory.rfid_failures)) {\n  memory.rfid_failures[knownCard] = memory.rfid_failures[knownCard].filter((ts) => now - ts <= windowMs);\n  if (memory.rfid_failures[knownCard].length === 0) delete memory.rfid_failures[knownCard];\n}\n\nconst repeatedCards = Object.keys(memory.rfid_failures)\n  .filter((knownCard) => memory.rfid_failures[knownCard].length >= threshold);\n\nmemory.blacklisted_cards = Array.from(new Set([...(memory.blacklisted_cards || []), ...repeatedCards]));\n\nconst combined = [];\nif (door.forced_entry && security.audio_distress) combined.push('FORCED_DOOR_AUDIO_DISTRESS');\nif (door.forced_entry && String(cabin.direction || 'IDLE') !== 'IDLE') combined.push('FORCED_DOOR_WHILE_MOVING');\nif (door.forced_entry && security.rfid_access_granted === false) combined.push('RFID_DENIED_FORCED_DOOR');\nif (repeatedCards.length > 0) combined.push('REPEATED_ACCESS_ATTEMPTS');\n\nlet securityState = 'NORMAL';\nlet alertLevel = 'NORMAL';\nlet severity = 'INFO';\nconst actions = [];\nconst recommendation = [];\n\nif (combined.some((item) => ['FORCED_DOOR_AUDIO_DISTRESS', 'FORCED_DOOR_WHILE_MOVING'].includes(item))) {\n  securityState = 'LOCKDOWN';\n  alertLevel = 'CRITICAL';\n  severity = 'CRITICAL';\n  actions.push({ agent: 'control', command: 'LOCKDOWN', priority: 'CRITICAL', reason: combined });\n  recommendation.push('Immediate operator review and physical security inspection required.');\n} else if (door.forced_entry || security.audio_distress) {\n  securityState = 'HUMAN_REVIEW_REQUIRED';\n  alertLevel = 'CRITICAL';\n  severity = 'CRITICAL';\n  actions.push({ agent: 'control', command: 'LOCKDOWN', priority: 'CRITICAL', reason: [door.forced_entry ? 'FORCED_ENTRY' : 'DISTRESS_AUDIO'] });\n  recommendation.push('Lockdown recommended until the incident is acknowledged.');\n} else if (combined.length > 0) {\n  securityState = 'SUSPICIOUS';\n  alertLevel = 'WARNING';\n  severity = 'WARNING';\n  recommendation.push('Monitor access attempts and verify RFID credential ownership.');\n} else if (card && security.rfid_access_granted === false) {\n  securityState = 'WATCH';\n  alertLevel = 'WATCH';\n  recommendation.push('Single denied RFID attempt observed.');\n}\n\nconst activeSecurityIncident = ['LOCKDOWN', 'HUMAN_REVIEW_REQUIRED', 'SUSPICIOUS'].includes(securityState);\nif (activeSecurityIncident) {\n  memory.active_incidents.push({\n    correlation_id: event.correlation_id,\n    state: securityState,\n    combined,\n    observed_at: nowIso\n  });\n  memory.active_incidents = memory.active_incidents.slice(-50);\n}\n\nstate[key] = memory;\n\nreturn [{\n  json: {\n    ...event,\n    severity: severity === 'CRITICAL' ? 'CRITICAL' : event.severity || severity,\n    security_analysis: {\n      state: securityState,\n      alert_level: alertLevel,\n      severity,\n      blacklisted_cards: memory.blacklisted_cards,\n      repeated_cards: repeatedCards,\n      combined_events: combined,\n      active_security_incident: activeSecurityIncident,\n      human_review_required: securityState === 'HUMAN_REVIEW_REQUIRED',\n      security_recommendation: recommendation.join(' '),\n      actions,\n      analyzed_at: nowIso\n    },\n    metadata: {\n      ...(event.metadata || {}),\n      workflow: '04_security_maintenance_agents',\n      node: 'Security State Machine',\n      schema_version: '1.0'\n    }\n  }\n}];\n\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1024,
+        -320
+      ],
+      "id": "334fcc7a-f0d8-42fb-b14d-8457fec47260",
+      "name": "Security State Machine"
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json || {};\nconst features = body.features || {};\nreturn [{ json: { thing_id: body.thingId || 'building:floor1:elevator', payload: { cabin: features.cabin?.properties || {}, door: features.door?.properties || {}, motor: { vibration_g: features.motor?.properties?.vibration_g ?? features.motor?.properties?.vibration_level ?? 0, vibration_baseline_g: features.motor?.properties?.vibration_baseline_g ?? 0.05, temperature_c: features.motor?.properties?.temperature_c ?? 0, hours_operated: features.motor?.properties?.hours_operated ?? 0, current_draw_a: features.motor?.properties?.current_draw_a ?? 0, power_kw: features.motor?.properties?.power_kw ?? 0, health_status: features.motor?.properties?.health_status ?? 'UNKNOWN' }, security: features.security?.properties || {} }, risk_analysis: { flags: [], severity: 'INFO', risk_score: body.attributes?.risk_score || 0 }, source: 'scheduled-maintenance-scan' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -800,
+        96
+      ],
+      "id": "dbf2517c-e533-465b-b0a6-a5ee0b25d824",
+      "name": "Normalize Maintenance Snapshot"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawInput = $input.first().json || {};\nconst input = (rawInput.body && typeof rawInput.body === 'object' && rawInput.body.thing_id) ? rawInput.body : rawInput;\nconst payload = input.payload || {};\nconst motor = payload.motor || {};\nconst door = payload.door || {};\nconst cabin = payload.cabin || {};\nconst energy = payload.energy || {};\nconst flags = input.risk_analysis?.flags || [];\n\nconst num = (value, fallback = 0) => {\n  const n = Number(value);\n  return Number.isFinite(n) ? n : fallback;\n};\n\nconst clamp = (value, min, max) => Math.max(min, Math.min(max, value));\nconst thingId = input.thing_id || $env.PRIMARY_THING_ID || 'building:floor1:elevator';\nconst now = new Date();\nconst vibRatio = num(motor.vibration_g) / Math.max(num(motor.vibration_baseline_g, 0.05), 0.001);\nconst hoursFactor = clamp(num(motor.hours_operated) / 10000, 0, 1);\nconst loadFactor = clamp(num(cabin.load_kg) / Math.max(num(cabin.max_load_kg, 800), 1), 0, 1.5);\nconst tempFactor = clamp((num(motor.temperature_c) - 55) / 45, 0, 1);\nconst currentFactor = clamp(num(motor.current_draw_a) / 45, 0, 1);\nconst powerFactor = clamp(num(motor.power_kw) / 12, 0, 1);\nconst doorFactor = clamp(num(door.cycle_count) / 30000, 0, 1);\nconst forcedStopFactor = flags.filter((flag) => ['EMERGENCY_STOP_ACTIVE', 'STUCK_BETWEEN_FLOORS'].includes(flag)).length > 0 ? 1 : 0;\nconst energyFactor = Array.isArray(energy.recommendations) && energy.recommendations.length > 0 ? 1 : 0;\n\nconst wearIndex = clamp(\n  (hoursFactor * 22) +\n  (loadFactor * 10) +\n  (clamp(vibRatio / 4, 0, 1) * 28) +\n  (tempFactor * 14) +\n  (currentFactor * 10) +\n  (powerFactor * 7) +\n  (doorFactor * 6) +\n  (forcedStopFactor * 8) +\n  (energyFactor * 5),\n  0,\n  100\n);\n\nlet priority = 'LOW';\nlet estimatedFailureDays = 120;\nconst tasks = [];\nconst issueReasons = [];\n\nif (wearIndex >= 85 || vibRatio >= 4 || num(motor.temperature_c) >= 90) {\n  priority = 'CRITICAL';\n  estimatedFailureDays = 3;\n  tasks.push({ task: 'Immediate motor, brake, and bearing inspection', urgency: 'IMMEDIATE', estimated_hours: 6 });\n  issueReasons.push('critical_wear');\n} else if (wearIndex >= 70 || vibRatio >= 3 || num(motor.temperature_c) >= 80) {\n  priority = 'HIGH';\n  estimatedFailureDays = 10;\n  tasks.push({ task: 'Motor thermal inspection', urgency: 'HIGH', estimated_hours: 3 });\n  tasks.push({ task: 'Vibration and bearing diagnostics', urgency: 'HIGH', estimated_hours: 3 });\n  issueReasons.push('high_wear');\n} else if (wearIndex >= 50 || vibRatio >= 2.2 || flags.includes('HIGH_CURRENT_DRAW')) {\n  priority = 'MEDIUM';\n  estimatedFailureDays = 30;\n  tasks.push({ task: 'Planned vibration trend review', urgency: 'PLANNED', estimated_hours: 2 });\n  tasks.push({ task: 'Current draw and power baseline check', urgency: 'PLANNED', estimated_hours: 2 });\n  issueReasons.push('degradation_trend');\n} else {\n  tasks.push({ task: 'Routine inspection', urgency: 'ROUTINE', estimated_hours: 1 });\n  issueReasons.push('routine');\n}\n\nconst issueKey = issueReasons.join('+');\nconst workOrderId = `WO-${thingId.replace(/[^a-zA-Z0-9]/g, '-')}-${issueKey}-${now.getTime()}`;\nconst nextServiceDate = new Date(now);\nnextServiceDate.setDate(nextServiceDate.getDate() + clamp(estimatedFailureDays - 2, 1, 45));\n\nreturn [{\n  json: {\n    ...input,\n    work_order: {\n      work_order_id: workOrderId,\n      correlation_id: input.correlation_id,\n      thing_id: thingId,\n      issue_key: issueKey,\n      priority,\n      wear_index: Math.round(wearIndex * 100) / 100,\n      estimated_failure_days: estimatedFailureDays,\n      tasks,\n      evidence: {\n        vibration_ratio: Math.round(vibRatio * 100) / 100,\n        motor_temperature_c: num(motor.temperature_c),\n        hours_operated: num(motor.hours_operated),\n        current_draw_a: num(motor.current_draw_a),\n        power_kw: num(motor.power_kw),\n        door_cycle_count: num(door.cycle_count),\n        flags,\n        energy_recommendations: energy.recommendations || []\n      },\n      status: 'OPEN',\n      notify_required: ['MEDIUM', 'HIGH', 'CRITICAL'].includes(priority),\n      next_service_date: nextServiceDate.toISOString().slice(0, 10),\n      generated_at: now.toISOString()\n    }\n  }\n}];\n\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -576,
+        192
+      ],
+      "id": "20a80a71-50cb-45ad-840b-103336713988",
+      "name": "Predictive Maintenance Engine"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Route: Notify Maintenance?": {
+      "main": [
+        [
+          {
+            "node": "Queue Maintenance Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Write Maintenance Schedule to Ditto": {
+      "main": [
+        [
+          {
+            "node": "Route: Notify Maintenance?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ensure Maintenance Feature Exists": {
+      "main": [
+        [
+          {
+            "node": "Write Maintenance Schedule to Ditto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Current Thing for Maintenance": {
+      "main": [
+        [
+          {
+            "node": "Normalize Maintenance Snapshot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule: Maintenance Scan Every 6h": {
+      "main": [
+        [
+          {
+            "node": "GET Current Thing for Maintenance",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: Maintenance Events": {
+      "main": [
+        [
+          {
+            "node": "Predictive Maintenance Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route: Notify Security?": {
+      "main": [
+        [
+          {
+            "node": "Queue Security Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route: Lockdown?": {
+      "main": [
+        [
+          {
+            "node": "Build Lockdown Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Lockdown Request": {
+      "main": [
+        [
+          {
+            "node": "Queue Control Lockdown",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: Security Events": {
+      "main": [
+        [
+          {
+            "node": "Security State Machine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Security State Machine": {
+      "main": [
+        [
+          {
+            "node": "Route: Notify Security?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route: Lockdown?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Write Security State to Ditto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Maintenance Snapshot": {
+      "main": [
+        [
+          {
+            "node": "Predictive Maintenance Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Predictive Maintenance Engine": {
+      "main": [
+        [
+          {
+            "node": "Persist Maintenance Work Order",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Ensure Maintenance Feature Exists",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "74e974bf-b88c-4ee0-96d1-8f8580539883",
+  "meta": {
+    "instanceId": "417ede3735a1a3ac213ca021cd26620099d309138c4710d0d002e06e112f89de"
+  },
+  "id": "dEbsAQc8JujdcYnP",
+  "tags": []
+}

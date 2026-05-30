@@ -1,0 +1,42 @@
+# =============================================================================
+# Smart Elevator broker ACL
+# Topic ids use the MQTT-safe form, e.g.
+#   elevator/building-floor1-elevator/{telemetry,events,status,commands}
+# Mosquitto semantics: "topic read" = may subscribe/receive,
+#                      "topic write" = may publish.
+#
+# SAFETY PROPERTY: only 'bridge' and 'agents' may PUBLISH to .../commands.
+# The ESP32 may only RECEIVE commands; the dashboard is read-only monitoring.
+# =============================================================================
+
+# --- ESP32 device: emits sensor data, receives commands. Nothing else. -------
+user esp32-elevator
+topic write elevator/building-floor1-elevator/telemetry
+topic write elevator/building-floor1-elevator/events
+topic write elevator/building-floor1-elevator/status
+topic read  elevator/building-floor1-elevator/commands
+
+# --- Bridge (MQTT <-> Ditto): consumes telemetry, forwards operator commands -
+user bridge
+topic read  elevator/+/telemetry
+topic read  elevator/+/events
+topic read  elevator/+/status
+topic write elevator/+/commands
+
+# --- n8n agents: monitor everything, may issue commands ----------------------
+user agents
+topic read  elevator/+/telemetry
+topic read  elevator/+/events
+topic read  elevator/+/status
+topic read  elevator/+/commands
+topic write elevator/+/commands
+
+# --- Dashboard browser: READ-ONLY monitoring (commands go via Ditto) ---------
+user dashboard
+topic read  elevator/+/telemetry
+topic read  elevator/+/events
+topic read  elevator/+/status
+
+# --- Container healthcheck: publish-only to a throwaway health topic ----------
+user healthcheck
+topic write healthcheck/mqtt

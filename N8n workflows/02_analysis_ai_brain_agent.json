@@ -1,0 +1,570 @@
+{
+  "name": "02_analysis_ai_brain_agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "analysis-agent",
+        "options": {}
+      },
+      "id": "01ac2c31-f9e5-4237-bec1-05e7ad757e1f",
+      "name": "Webhook: Receive Canonical Event",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        128,
+        240
+      ],
+      "webhookId": "analysis-agent"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.risk_analysis.risk_score }}",
+              "operation": "largerEqual",
+              "value2": 30
+            }
+          ]
+        }
+      },
+      "id": "353c49f5-496a-413d-9510-b5c328467d1f",
+      "name": "Route: LLM Required?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        576,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $input.first().json || {};\nconst enabled = String($env.LOCAL_LLM_ENABLED || 'false').toLowerCase() === 'true';\nconst baseUrl = ($env.LOCAL_LLM_URL || 'http://ollama:11434').replace(/\\/$/, '');\nconst model = $env.LOCAL_LLM_MODEL || 'llama3.2';\n\nif (!enabled) {\n  return [{\n    json: {\n      ...event,\n      llm_analysis: {\n        skipped: true,\n        reason: 'LOCAL_LLM_DISABLED',\n        provider: 'ollama'\n      }\n    }\n  }];\n}\n\ntry {\n  const response = await $http.request({\n    method: 'POST',\n    url: `${baseUrl}/api/chat`,\n    headers: { 'Content-Type': 'application/json' },\n    body: JSON.stringify({\n      model,\n      stream: false,\n      options: { temperature: 0.1 },\n      messages: [\n        {\n          role: 'system',\n          content: [\n            'You summarize elevator incidents for a SCADA operator.',\n            'Return JSON only with keys: explanation, maintenance_recommendation, incident_summary, confidence.',\n            'Do not authorize commands. Do not change risk scores.'\n          ].join(' ')\n        },\n        {\n          role: 'user',\n          content: JSON.stringify({\n            thing_id: event.thing_id,\n            risk_analysis: event.risk_analysis,\n            payload: event.payload,\n            behavior_timeline: (event.behavior_timeline || []).slice(-20)\n          })\n        }\n      ]\n    }),\n    timeout: 8000\n  });\n\n  const content = response.message?.content || response.response || '{}';\n  const parsed = JSON.parse(content);\n  return [{\n    json: {\n      ...event,\n      llm_analysis: {\n        provider: 'ollama',\n        model,\n        skipped: false,\n        explanation: parsed.explanation || '',\n        maintenance_recommendation: parsed.maintenance_recommendation || '',\n        incident_summary: parsed.incident_summary || '',\n        confidence: Number(parsed.confidence || 0)\n      }\n    }\n  }];\n} catch (error) {\n  return [{\n    json: {\n      ...event,\n      llm_analysis: {\n        provider: 'ollama',\n        model,\n        skipped: true,\n        reason: 'LOCAL_LLM_ERROR',\n        detail: error.message || 'Unknown Ollama failure'\n      }\n    }\n  }];\n}\n\r\n"
+      },
+      "id": "437d8193-3db9-4626-87a1-72ac7d22c966",
+      "name": "LLM Context Analyzer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ ($env.DITTO_BASE_URL || 'http://docker-nginx-1') + '/api/2/things/' + $json.thing_id + '/attributes/risk_score' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.risk_analysis.risk_score }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "f54bcf8b-bb64-4beb-9b5c-e4ecb3d872f1",
+      "name": "Write Risk Score to Ditto",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1248,
+        48
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "DHKgydzDWawM8nkx",
+          "name": "Authentication"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ ($env.DITTO_BASE_URL || 'http://docker-nginx-1') + '/api/2/things/' + $json.thing_id + '/features/ai_analysis' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ properties: { analyzed_at: $json.risk_analysis.analyzed_at, severity: $json.risk_analysis.severity, risk_score: $json.risk_analysis.risk_score, flags: $json.risk_analysis.flags, llm_analysis: $json.llm_analysis, recommended_action: ($json.risk_analysis.triggered_action && $json.risk_analysis.triggered_action.command) || '', explanation: $json.risk_analysis.explanation, requires_human_review: $json.risk_analysis.requires_human_review, source: 'n8n', updated_at: $json.risk_analysis.analyzed_at } }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "8bd6dd10-5014-4e11-bc4e-af2f046ae632",
+      "name": "Write AI Analysis to Ditto",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1248,
+        240
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "DHKgydzDWawM8nkx",
+          "name": "Authentication"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.risk_analysis.severity }}",
+              "operation": "notEqual",
+              "value2": "OK"
+            }
+          ]
+        }
+      },
+      "id": "b68c13be-b958-4703-960f-c52ff36f0dc4",
+      "name": "Route: Notify Advisory?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1248,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://n8n:5678/webhook/notification-agent",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ thing_id: $json.thing_id, severity: $json.risk_analysis.severity, event: $json, risk_analysis: $json.risk_analysis, llm_analysis: $json.llm_analysis }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "21c46728-f177-4b92-a797-2ee54a357153",
+      "name": "Queue Notification Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1472,
+        432
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.risk_analysis.action_required }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "9c784179-3a3b-4e29-89ee-021bb56b437a",
+      "name": "Route: Action Required?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1248,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.triggered_action.agent }}",
+              "value2": "control"
+            }
+          ]
+        }
+      },
+      "id": "fa2ea78f-aaef-4bcf-b222-3be77453991c",
+      "name": "Route Control Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1696,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.triggered_action.agent }}",
+              "value2": "security"
+            }
+          ]
+        }
+      },
+      "id": "1658d8a7-4f3d-4994-b958-e6d9fe54ecca",
+      "name": "Route Security Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1696,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.triggered_action.agent }}",
+              "value2": "maintenance"
+            }
+          ]
+        }
+      },
+      "id": "1cc93fbb-66e3-4586-8a99-b321f59fcd56",
+      "name": "Route Maintenance Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        1696,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://n8n:5678/webhook/control-agent",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "fc9ad822-759b-4422-94ae-8b3c5692e3f3",
+      "name": "Queue Control Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1920,
+        336
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://n8n:5678/webhook/security-agent",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "8d3e667b-02c0-4d63-9b03-cbecff2c4387",
+      "name": "Queue Security Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1920,
+        528
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://n8n:5678/webhook/maintenance-agent",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "8f464438-e2ba-4199-9c9e-e9c5acdab652",
+      "name": "Queue Maintenance Agent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1920,
+        720
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json || {};\nconst event = (raw.body && typeof raw.body === 'object' && raw.body.thing_id) ? raw.body : raw;\nconst payload = event.payload || {};\nconst cabin = payload.cabin || {};\nconst door = payload.door || {};\nconst motor = payload.motor || {};\nconst security = payload.security || {};\nconst timeline = Array.isArray(event.behavior_timeline) ? event.behavior_timeline : [];\n\nconst add = (breakdown, flags, key, points, flag) => {\n  breakdown[key] = (breakdown[key] || 0) + points;\n  if (flag && !flags.includes(flag)) flags.push(flag);\n};\n\nconst num = (value, fallback = 0) => {\n  const n = Number(value);\n  return Number.isFinite(n) ? n : fallback;\n};\n\nlet score = 0;\nconst flags = [];\nconst breakdown = {};\n\nif (door.forced_entry) add(breakdown, flags, 'forced_door_entry', 65, 'FORCED_ENTRY');\nif (security.audio_distress) add(breakdown, flags, 'audio_distress', 60, 'DISTRESS_AUDIO');\nif (security.rfid_last_card && security.rfid_access_granted === false) add(breakdown, flags, 'unauthorized_rfid', 25, 'UNAUTHORIZED_RFID');\nif (num(security.unauthorized_access_attempts) >= 3) add(breakdown, flags, 'repeated_failed_rfid', 20, 'REPEATED_RFID_FAILURES');\n\nconst vib = num(motor.vibration_g);\nconst vibBaseline = Math.max(num(motor.vibration_baseline_g, 0.05), 0.001);\nconst vibRatio = vib / vibBaseline;\nif (vibRatio >= 4) add(breakdown, flags, 'motor_vibration_critical', 35, 'CRITICAL_VIBRATION');\nelse if (vibRatio >= 2.5) add(breakdown, flags, 'motor_vibration_high', 22, 'HIGH_VIBRATION');\nelse if (vibRatio >= 1.75) add(breakdown, flags, 'motor_vibration_elevated', 10, 'ELEVATED_VIBRATION');\n\nconst motorTemp = num(motor.temperature_c);\nif (motorTemp >= 90) add(breakdown, flags, 'motor_overheat', 35, 'MOTOR_OVERHEAT');\nelse if (motorTemp >= 75) add(breakdown, flags, 'motor_warm', 15, 'MOTOR_WARM');\n\nconst loadRatio = num(cabin.load_kg) / Math.max(num(cabin.max_load_kg, 800), 1);\nif (loadRatio > 1.0) add(breakdown, flags, 'overload', 40, 'OVERLOAD');\nelse if (loadRatio >= 0.95) add(breakdown, flags, 'near_overload', 15, 'NEAR_OVERLOAD');\n\nif (cabin.emergency_stop) add(breakdown, flags, 'emergency_stop', 45, 'EMERGENCY_STOP_ACTIVE');\nif (cabin.between_floors && cabin.direction === 'IDLE') add(breakdown, flags, 'stuck_between_floors', 35, 'STUCK_BETWEEN_FLOORS');\nif (num(cabin.speed_ms) > 0.15 && ['OPEN', 'OPENING', 'BLOCKED'].includes(String(door.state || '').toUpperCase())) {\n  add(breakdown, flags, 'speed_with_open_door', 70, 'MOVING_WITH_DOOR_OPEN');\n}\n\nif (num(motor.current_draw_a) >= 45) add(breakdown, flags, 'high_current_draw', 18, 'HIGH_CURRENT_DRAW');\nif (num(motor.power_kw) >= 12) add(breakdown, flags, 'high_power_usage', 14, 'HIGH_POWER_USAGE');\nif (num(door.cycle_count) >= 30000) add(breakdown, flags, 'door_cycles_high', 12, 'DOOR_CYCLE_FATIGUE');\nif (num(motor.hours_operated) >= 8000) add(breakdown, flags, 'overdue_service', 18, 'OVERDUE_SERVICE');\nelse if (num(motor.hours_operated) >= 6000) add(breakdown, flags, 'approaching_service', 8, 'APPROACHING_SERVICE');\n\nif (timeline.length >= 5) {\n  const securityEvents = timeline.filter((entry) => entry.forced_entry || entry.audio_distress).length;\n  if (securityEvents >= 3) add(breakdown, flags, 'security_event_frequency', 18, 'REPEATED_SECURITY_EVENTS');\n\n  const recentDoorCycles = timeline.filter((entry) => String(entry.door_state || '').toUpperCase() === 'OPEN').length;\n  if (recentDoorCycles >= 4) add(breakdown, flags, 'rapid_door_activity', 8, 'RAPID_DOOR_CYCLES');\n\n  const vibrations = timeline.map((entry) => num(entry.motor_vibration_g, NaN)).filter(Number.isFinite);\n  if (vibrations.length >= 4) {\n    const midpoint = Math.floor(vibrations.length / 2);\n    const firstAvg = vibrations.slice(0, midpoint).reduce((sum, value) => sum + value, 0) / midpoint;\n    const lastAvg = vibrations.slice(midpoint).reduce((sum, value) => sum + value, 0) / (vibrations.length - midpoint);\n    if (firstAvg > 0 && lastAvg > firstAvg * 1.25) add(breakdown, flags, 'vibration_trend', 12, 'VIBRATION_ACCELERATING');\n  }\n}\n\nconst cappedScore = Math.min(100, Math.round(Object.values(breakdown).reduce((sum, value) => sum + value, 0)));\nlet severity = 'OK';\nif (cappedScore >= 85 || flags.includes('MOVING_WITH_DOOR_OPEN')) severity = 'CRITICAL';\nelse if (cappedScore >= 60) severity = 'WARNING';\nelse if (cappedScore >= 30) severity = 'INFO';\n\nconst requiresHumanReview = severity === 'CRITICAL' ||\n  flags.some((flag) => ['FORCED_ENTRY', 'DISTRESS_AUDIO', 'MOVING_WITH_DOOR_OPEN', 'STUCK_BETWEEN_FLOORS'].includes(flag));\n\nreturn [{\n  json: {\n    ...event,\n    risk_score: cappedScore,\n    severity,\n    risk_analysis: {\n      risk_score: cappedScore,\n      severity,\n      flags,\n      breakdown,\n      action_required: cappedScore >= 60 || requiresHumanReview,\n      requires_human_review: requiresHumanReview,\n      triggered_action: { agent: 'none', command: '', priority: 'LOW', reason: [], target_floor: null },\n      explanation: flags.length\n        ? `Deterministic risk engine detected: ${flags.join(', ')}.`\n        : 'No elevated risk indicators detected.',\n      analyzed_at: new Date().toISOString()\n    },\n    metadata: {\n      ...(event.metadata || {}),\n      workflow: '02_analysis_ai_brain_agent',\n      node: 'Deterministic Risk Engine'\n    }\n  }\n}];\n\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        352,
+        240
+      ],
+      "id": "a07031ad-f057-461f-beb1-d1956e06323c",
+      "name": "Deterministic Risk Engine"
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $input.first().json;\nreturn [{ json: { ...event, llm_analysis: { skipped: true, reason: 'LOW_RISK' } } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        336
+      ],
+      "id": "d5942f98-87aa-444c-925f-45d082809fec",
+      "name": "LLM Skipped"
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $input.first().json || {};\nconst analysis = event.risk_analysis || {};\nconst flags = analysis.flags || [];\nconst actions = [];\n\nconst pushAction = (agent, command, priority, reason, extra = {}) => {\n  actions.push({\n    agent,\n    command,\n    priority,\n    reason,\n    target_floor: extra.target_floor ?? null,\n    correlation_id: event.correlation_id,\n    risk_score: analysis.risk_score || event.risk_score || 0,\n    issued_at: new Date().toISOString(),\n    requires_human_review: !!analysis.requires_human_review,\n    ...extra\n  });\n};\n\nif (flags.includes('MOVING_WITH_DOOR_OPEN') || flags.includes('STUCK_BETWEEN_FLOORS')) {\n  pushAction('control', 'EMERGENCY_STOP', 'CRITICAL', flags);\n}\n\nif (flags.some((flag) => ['FORCED_ENTRY', 'DISTRESS_AUDIO', 'REPEATED_SECURITY_EVENTS'].includes(flag))) {\n  pushAction('security', 'ESCALATE_SECURITY_STATE', 'CRITICAL', flags);\n  pushAction('control', 'LOCKDOWN', 'CRITICAL', flags);\n}\n\nif (flags.includes('OVERLOAD')) {\n  pushAction('control', 'RESTRICT_LOAD', 'HIGH', flags);\n}\n\nif (flags.some((flag) => [\n  'CRITICAL_VIBRATION',\n  'HIGH_VIBRATION',\n  'MOTOR_OVERHEAT',\n  'MOTOR_WARM',\n  'HIGH_CURRENT_DRAW',\n  'HIGH_POWER_USAGE',\n  'OVERDUE_SERVICE',\n  'APPROACHING_SERVICE',\n  'VIBRATION_ACCELERATING',\n  'DOOR_CYCLE_FATIGUE'\n].includes(flag))) {\n  pushAction('maintenance', 'CREATE_WORK_ORDER', analysis.severity === 'CRITICAL' ? 'CRITICAL' : 'HIGH', flags);\n}\n\nif (analysis.severity !== 'OK') {\n  pushAction('notification', 'NOTIFY_OPERATOR', analysis.severity === 'CRITICAL' ? 'CRITICAL' : 'MEDIUM', flags);\n}\n\nif (actions.length === 0) {\n  return [{\n    json: {\n      ...event,\n      triggered_action: {\n        agent: 'none',\n        command: '',\n        priority: 'LOW',\n        reason: [],\n        target_floor: null\n      }\n    }\n  }];\n}\n\nreturn actions.map((triggered_action) => ({\n  json: {\n    ...event,\n    triggered_action\n  }\n}));\n\r\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1472,
+        624
+      ],
+      "id": "891fb5c6-2d78-4f50-981e-f337f3736c94",
+      "name": "Action Router"
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $input.first().json || {};\nconst analysis = event.risk_analysis || {};\nconst llm = event.llm_analysis || { skipped: true, reason: 'NOT_RUN' };\n\nconst explanation = llm.skipped\n  ? analysis.explanation || 'Deterministic local analysis completed.'\n  : llm.explanation || analysis.explanation || 'Deterministic local analysis completed with local LLM summary.';\n\nreturn [{\n  json: {\n    ...event,\n    risk_score: analysis.risk_score || event.risk_score || 0,\n    severity: analysis.severity || event.severity || 'OK',\n    risk_analysis: {\n      risk_score: analysis.risk_score || 0,\n      severity: analysis.severity || 'OK',\n      flags: analysis.flags || [],\n      breakdown: analysis.breakdown || {},\n      action_required: !!analysis.action_required,\n      requires_human_review: !!analysis.requires_human_review,\n      triggered_action: analysis.triggered_action || { agent: 'none', command: '', priority: 'LOW', reason: [], target_floor: null },\n      explanation,\n      local_llm_summary: llm.skipped ? null : {\n        provider: llm.provider,\n        model: llm.model,\n        incident_summary: llm.incident_summary || '',\n        maintenance_recommendation: llm.maintenance_recommendation || '',\n        confidence: Number(llm.confidence || 0)\n      },\n      analyzed_at: new Date().toISOString()\n    },\n    metadata: {\n      ...(event.metadata || {}),\n      workflow: '02_analysis_ai_brain_agent',\n      node: 'Finalize Risk Analysis',\n      schema_version: '1.0'\n    }\n  }\n}];\n\r\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1024,
+        240
+      ],
+      "id": "76d0fb59-848f-4ce8-be32-d3d896ebe02c",
+      "name": "Finalize Risk Analysis"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook: Receive Canonical Event": {
+      "main": [
+        [
+          {
+            "node": "Deterministic Risk Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route: LLM Required?": {
+      "main": [
+        [
+          {
+            "node": "LLM Context Analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "LLM Skipped",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM Context Analyzer": {
+      "main": [
+        [
+          {
+            "node": "Finalize Risk Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route: Notify Advisory?": {
+      "main": [
+        [
+          {
+            "node": "Queue Notification Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route: Action Required?": {
+      "main": [
+        [
+          {
+            "node": "Action Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Control Action": {
+      "main": [
+        [
+          {
+            "node": "Queue Control Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Security Action": {
+      "main": [
+        [
+          {
+            "node": "Queue Security Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Maintenance Action": {
+      "main": [
+        [
+          {
+            "node": "Queue Maintenance Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deterministic Risk Engine": {
+      "main": [
+        [
+          {
+            "node": "Route: LLM Required?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "LLM Skipped": {
+      "main": [
+        [
+          {
+            "node": "Finalize Risk Analysis",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Action Router": {
+      "main": [
+        [
+          {
+            "node": "Route Control Action",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route Security Action",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route Maintenance Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Risk Analysis": {
+      "main": [
+        [
+          {
+            "node": "Write Risk Score to Ditto",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Write AI Analysis to Ditto",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route: Notify Advisory?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route: Action Required?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "timezone": "Africa/Algiers",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "b45e6762-57e7-4156-a12c-37cb08624925",
+  "meta": {
+    "instanceId": "417ede3735a1a3ac213ca021cd26620099d309138c4710d0d002e06e112f89de"
+  },
+  "id": "krTefMrILF9CMRAE",
+  "tags": []
+}

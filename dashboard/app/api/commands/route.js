@@ -1,0 +1,518 @@
+/**
+ * POST /api/commands — Command Safety Gate enforcement point.
+ *
+ * Every operator command from the dashboard MUST go through this route. The
+ * route runs the deterministic safety gate, persists the decision (accepted
+ * or rejected) to control_command_log, audits the decision via the n8n
+ * audit-agent webhook, and — only if accepted — performs the planned Ditto
+ * writes.
+ *
+ * Invariant: rejected commands never produce Ditto writes.
+ *
+ * Auth model: this route runs server-side inside the Next.js dashboard. It
+ * is the single trusted boundary between operator input and Eclipse Ditto.
+ * The route is intentionally NOT exposed to the public internet in a local
+ * Docker deployment; for production, layer an auth provider in front of it.
+ */
+
+import { NextResponse } from "next/server";
+import {
+  validateCommand,
+  SAFETY_GATE_CONFIG,
+  SAFETY_GATE_VERSION,
+} from "../../../src/lib/commandSafetyGate.js";
+import { query } from "../../../src/server/db.js";
+
+export const dynamic = "force-dynamic";
+
+const DITTO_URL = (
+  process.env.DITTO_URL ||
+  process.env.DITTO_BASE_URL ||
+  process.env.NEXT_PUBLIC_DITTO_URL ||
+  "http://127.0.0.1:8080"
+).replace(/\/+$/, "");
+
+const DITTO_USER = process.env.DITTO_USER || process.env.DITTO_USERNAME || "ditto";
+const DITTO_PASSWORD = process.env.DITTO_PASSWORD || "ditto";
+const DITTO_AUTH = "Basic " + Buffer.from(`${DITTO_USER}:${DITTO_PASSWORD}`).toString("base64");
+const DITTO_TIMEOUT_MS = Number.parseInt(process.env.DITTO_TIMEOUT_MS || "8000", 10);
+const PRIMARY_THING_ID = process.env.PRIMARY_THING_ID || "building:floor1:elevator";
+
+const N8N_AUDIT_URL = (
+  process.env.N8N_AUDIT_URL ||
+  (process.env.WEBHOOK_URL ? `${process.env.WEBHOOK_URL.replace(/\/+$/, "")}/webhook/audit-agent` : null)
+);
+const DEVICE_ACTION_COMMANDS = new Set([
+  "MOVE_TO_FLOOR",
+  "SET_FAN",
+  "EMERGENCY_STOP",
+  "RESET_EMERGENCY",
+  "RESUME_NORMAL_MODE",
+  "RESET_ACTIVE_PROBLEMS",
+  "LOCKDOWN",
+  "RELEASE_LOCKDOWN",
+]);
+
+// ---------------------------------------------------------------------------
+// Fetch the latest twin state Ditto knows about.
+// Returns { twin, ditto_reachable }. Never throws — a Ditto outage MUST be
+// reflected to the safety gate as ditto_reachable:false, not as a 500.
+// ---------------------------------------------------------------------------
+async function loadTwinSnapshot(thingId) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), DITTO_TIMEOUT_MS);
+  try {
+    const url = `${DITTO_URL}/api/2/things/${encodeURIComponent(thingId)}`;
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { Authorization: DITTO_AUTH, Accept: "application/json" },
+      signal: controller.signal,
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      return { twin: null, ditto_reachable: false, error: `Ditto GET ${response.status}` };
+    }
+    const twin = await response.json();
+    // Carry a synthetic last_telemetry_at so the gate's stale-twin check can
+    // run. We use _modified if Ditto returned it; otherwise now (twin was
+    // just fetched). In practice the bridge updates the Thing on every
+    // telemetry tick, so _modified reflects telemetry freshness.
+    twin.last_telemetry_at = twin._modified || new Date().toISOString();
+    return { twin, ditto_reachable: true };
+  } catch (error) {
+    return { twin: null, ditto_reachable: false, error: error.message };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Persist the safety-gate decision to control_command_log. Always inserts
+// regardless of accepted/rejected — the rejection trace is itself audit
+// evidence.
+// ---------------------------------------------------------------------------
+async function persistDecision(decision, thingId, dittoWriteStatus, auditStatus) {
+  const sql = `
+    INSERT INTO control_command_log (
+      command_id, correlation_id, thing_id, command, command_label,
+      requested_by, source_agent, source, reason, risk_score, system_mode,
+      current_floor, target_floor, door_state, emergency_stop, load_kg,
+      decision, accepted, status, rejection_reasons, safety_snapshot,
+      raw_command, ditto_payload, ditto_path, ditto_write_status,
+      audit_status, metadata
+    ) VALUES (
+      $1, $2, $3, $4, $5,
+      $6, $7, $8, $9, $10, $11,
+      $12, $13, $14, $15, $16,
+      $17, $18, $19, $20::jsonb, $21::jsonb,
+      $22::jsonb, $23::jsonb, $24, $25,
+      $26, $27::jsonb
+    )
+    ON CONFLICT (command_id) DO UPDATE SET
+      ditto_write_status = EXCLUDED.ditto_write_status,
+      audit_status       = EXCLUDED.audit_status,
+      status             = EXCLUDED.status,
+      updated_at         = now()
+    RETURNING command_id, created_at, updated_at
+  `;
+  const snap = decision.safety_snapshot || {};
+  const dittoPathSummary = (decision.ditto_writes || []).map((w) => w.path).join(",") || null;
+  const reasonText = Array.isArray(decision.rejection_reasons) && decision.rejection_reasons.length > 0
+    ? decision.rejection_reasons.join("; ")
+    : (decision.raw_command?.reason
+        ? (Array.isArray(decision.raw_command.reason)
+            ? decision.raw_command.reason.join("; ")
+            : String(decision.raw_command.reason))
+        : null);
+  const params = [
+    decision.command_id,
+    decision.correlation_id,
+    thingId,
+    decision.command,
+    decision.command_label,
+    decision.requested_by,
+    decision.source_agent,
+    decision.source,
+    reasonText,
+    decision.risk_score ?? 0,
+    decision.system_mode,
+    snap.current_floor,
+    decision.target_floor,
+    snap.door_state,
+    snap.emergency_stop,
+    typeof snap.load_kg === "number" ? snap.load_kg : null,
+    decision.decision,
+    decision.accepted,
+    decision.decision,                              // legacy status column
+    JSON.stringify(decision.rejection_reasons || []),
+    JSON.stringify(decision.safety_snapshot || {}),
+    JSON.stringify(decision.raw_command || {}),
+    JSON.stringify(decision.ditto_writes || []),
+    dittoPathSummary,
+    dittoWriteStatus,
+    auditStatus,
+    JSON.stringify({
+      audit_severity: decision.audit_severity,
+      safety_gate_version: SAFETY_GATE_VERSION,
+    }),
+  ];
+  const result = await query(sql, params);
+  return result.rows[0];
+}
+
+// ---------------------------------------------------------------------------
+// Emit an audit event into audit_log. Best-effort; failure must not fail
+// the command.
+// ---------------------------------------------------------------------------
+async function persistAuditEvent(decision, eventType, errorMessage = null) {
+  if (!SAFETY_GATE_CONFIG.COMMAND_AUDIT_ENABLED) return "SKIPPED";
+  try {
+    await query(
+      `INSERT INTO audit_log (
+        audit_id, agent_name, event_type, thing_id, action, trigger,
+        risk_score, status, severity, correlation_id, workflow_name,
+        node_name, error_message, details
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6,
+        $7, $8, $9, $10, $11,
+        $12, $13, $14::jsonb
+      )`,
+      [
+        `${decision.command_id}-${eventType}`,
+        "dashboard_safety_gate",
+        eventType,
+        decision.raw_command?.thing_id || PRIMARY_THING_ID,
+        decision.command,
+        decision.source_agent || decision.source,
+        decision.risk_score ?? 0,
+        decision.accepted ? "SUCCESS" : "REJECTED",
+        decision.audit_severity || "INFO",
+        decision.correlation_id,
+        "command_safety_gate",
+        eventType,
+        errorMessage,
+        JSON.stringify({
+          command_id: decision.command_id,
+          rejection_reasons: decision.rejection_reasons,
+          safety_snapshot: decision.safety_snapshot,
+          ditto_writes_planned: decision.ditto_writes?.length || 0,
+        }),
+      ],
+    );
+    return "OK";
+  } catch (error) {
+    console.warn("[safety-gate] audit_log insert failed:", error.message);
+    return "FAILED";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Best-effort fanout to the n8n audit webhook.
+// ---------------------------------------------------------------------------
+async function pingN8nAudit(decision, eventType) {
+  if (!N8N_AUDIT_URL) return "SKIPPED";
+  try {
+    const response = await fetch(N8N_AUDIT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        agent: "dashboard_safety_gate",
+        event_type: eventType,
+        thing_id: decision.raw_command?.thing_id || PRIMARY_THING_ID,
+        action: decision.command,
+        correlation_id: decision.correlation_id,
+        command_id: decision.command_id,
+        risk_score: decision.risk_score,
+        status: decision.accepted ? "SUCCESS" : "REJECTED",
+        severity: decision.audit_severity || "INFO",
+        rejection_reasons: decision.rejection_reasons,
+        timestamp: new Date().toISOString(),
+      }),
+      signal: AbortSignal.timeout(2500),
+    });
+    return response.ok ? "OK" : `HTTP_${response.status}`;
+  } catch (error) {
+    return `ERROR:${error.message}`;
+  }
+}
+
+function encodeDittoPath(path) {
+  return String(path).split("/").filter(Boolean).map(encodeURIComponent).join("/");
+}
+
+function getFeaturePropertyWrite(path) {
+  const segments = String(path).split("/").filter(Boolean);
+  if (segments.length < 4) return null;
+  if (segments[0] !== "features" || segments[2] !== "properties") return null;
+
+  return {
+    featureId: segments[1],
+    propertySegments: segments.slice(3),
+  };
+}
+
+function setNestedProperty(target, segments, value) {
+  let cursor = target;
+  segments.forEach((segment, index) => {
+    if (index === segments.length - 1) {
+      cursor[segment] = value;
+      return;
+    }
+
+    if (!cursor[segment] || typeof cursor[segment] !== "object" || Array.isArray(cursor[segment])) {
+      cursor[segment] = {};
+    }
+    cursor = cursor[segment];
+  });
+}
+
+function isMissingFeatureResponse(status, body) {
+  if (status !== 404) return false;
+  return String(body || "").includes("things:feature.notfound");
+}
+
+async function putDittoPath(thingId, path, value) {
+  const writePath = encodeDittoPath(path);
+  const url = `${DITTO_URL}/api/2/things/${encodeURIComponent(thingId)}/${writePath}`;
+  const response = await fetch(url, {
+    method: "PUT",
+    headers: { Authorization: DITTO_AUTH, "Content-Type": "application/json" },
+    body: JSON.stringify(value),
+    signal: AbortSignal.timeout(DITTO_TIMEOUT_MS),
+  });
+  const body = response.ok ? "" : await response.text().catch(() => "");
+  return { ok: response.ok, status: response.status, body };
+}
+
+async function createFeatureForPropertyWrite(thingId, write) {
+  const featureWrite = getFeaturePropertyWrite(write.path);
+  if (!featureWrite) return null;
+
+  const properties = {};
+  setNestedProperty(properties, featureWrite.propertySegments, write.value);
+  const featurePath = `features/${featureWrite.featureId}`;
+  return putDittoPath(thingId, featurePath, { properties });
+}
+
+// ---------------------------------------------------------------------------
+// Execute the planned Ditto writes. Returns { status, errors }.
+// Missing Ditto features are created once, then the original property write is
+// retried. This keeps command intent durable on freshly initialized Things.
+// ---------------------------------------------------------------------------
+async function executeDittoWrites(thingId, writes) {
+  const errors = [];
+  for (const write of writes) {
+    try {
+      let result = await putDittoPath(thingId, write.path, write.value);
+
+      if (!result.ok && isMissingFeatureResponse(result.status, result.body)) {
+        const createResult = await createFeatureForPropertyWrite(thingId, write);
+        if (createResult?.ok) {
+          result = await putDittoPath(thingId, write.path, write.value);
+        } else if (createResult) {
+          errors.push(`PUT ${write.path}: ${createResult.status} ${createResult.body.slice(0, 200)}`);
+          continue;
+        }
+      }
+
+      if (!result.ok) {
+        errors.push(`PUT ${write.path}: ${result.status} ${result.body.slice(0, 200)}`);
+      }
+    } catch (error) {
+      errors.push(`PUT ${write.path}: ${error.message}`);
+    }
+  }
+  return {
+    status: errors.length === 0 ? "SUCCEEDED" : (errors.length < writes.length ? "PARTIAL" : "FAILED"),
+    errors,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Persist a durable command intent in Ditto for the bridge to fan out.
+// Telemetry can overwrite physical state such as cabin/target_floor. Command
+// intent is separate control-plane state with a unique command_id, so one-shot
+// operator commands cannot disappear between telemetry ticks.
+// ---------------------------------------------------------------------------
+function compactObject(value) {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined && entry !== null),
+  );
+}
+
+function buildCommandIntentWrite(decision, thingId) {
+  if (!DEVICE_ACTION_COMMANDS.has(decision.command)) return null;
+
+  const raw = decision.raw_command || {};
+  const now = new Date().toISOString();
+  const reason = Array.isArray(raw.reason) ? raw.reason.join("; ") : raw.reason;
+
+  return {
+    path: "features/control/properties/pending_command",
+    value: compactObject({
+      command_id: decision.command_id,
+      correlation_id: decision.correlation_id,
+      command: decision.command,
+      thing_id: thingId,
+      source: decision.source,
+      source_agent: decision.source_agent,
+      requested_by: decision.requested_by,
+      requested_at: decision.requested_at || now,
+      queued_at: now,
+      status: "PENDING",
+      target_floor: decision.target_floor ?? raw.target_floor,
+      fan_state: raw.fan_state,
+      fan_mode: raw.fan_mode || raw.mode,
+      reason,
+      safety_gate_version: SAFETY_GATE_VERSION,
+    }),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Mark accepted commands as queued for bridge fanout.
+// Architecture invariant: the dashboard writes desired control state to Ditto
+// only. The bridge observes Ditto changes and publishes MQTT commands using the
+// broker identity that is explicitly allowed to write elevator/+/commands.
+// ---------------------------------------------------------------------------
+function buildBridgeFanoutResult(writeResult, hasCommandIntent) {
+  if (writeResult.status !== "SUCCEEDED") {
+    return {
+      status: "SKIPPED",
+      topic: null,
+      error: "Ditto write did not succeed",
+    };
+  }
+
+  if (!hasCommandIntent) {
+    return {
+      status: "NO_DEVICE_ACTION",
+      topic: null,
+      error: null,
+    };
+  }
+
+  return {
+    status: "QUEUED_VIA_DITTO_BRIDGE",
+    topic: null,
+    error: null,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// POST handler.
+// ---------------------------------------------------------------------------
+export async function POST(request) {
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({
+      ok: false,
+      error: "Invalid JSON body",
+    }, { status: 400 });
+  }
+
+  const thingId = body.thing_id || PRIMARY_THING_ID;
+
+  // 1. Pull the latest twin state (or note that Ditto is unreachable).
+  const { twin, ditto_reachable, error: dittoErr } = await loadTwinSnapshot(thingId);
+
+  // 2. Run the deterministic safety gate.
+  const decision = validateCommand(body, twin, { ditto_reachable });
+
+  // 3. Persist & audit BEFORE any Ditto write — the decision must always
+  //    leave a trace, regardless of write success/failure.
+  await persistAuditEvent(decision, "COMMAND_RECEIVED");
+
+  if (!decision.accepted) {
+    await persistDecision(decision, thingId, "SKIPPED", "PENDING");
+    const auditStatus = await persistAuditEvent(decision, "COMMAND_REJECTED");
+    const n8nStatus = await pingN8nAudit(decision, "COMMAND_REJECTED");
+    await query(
+      `UPDATE control_command_log SET audit_status = $1 WHERE command_id = $2`,
+      [`${auditStatus}/${n8nStatus}`, decision.command_id],
+    );
+    return NextResponse.json({
+      ok: true,
+      ...decision,
+      ditto_write_status: "SKIPPED",
+      audit_status: `${auditStatus}/${n8nStatus}`,
+      twin_reachable: ditto_reachable,
+      twin_error: dittoErr || null,
+    }, { status: 200 });
+  }
+
+  // 4. Accepted — persist as ACCEPTED, then perform Ditto writes.
+  const commandIntentWrite = buildCommandIntentWrite(decision, thingId);
+  const executionWrites = [
+    ...(decision.ditto_writes || []),
+    ...(commandIntentWrite ? [commandIntentWrite] : []),
+  ];
+  const executionDecision = {
+    ...decision,
+    ditto_writes: executionWrites,
+  };
+
+  await persistDecision(executionDecision, thingId, "PENDING", "PENDING");
+  await persistAuditEvent(executionDecision, "COMMAND_ACCEPTED");
+
+  const writeResult = await executeDittoWrites(thingId, executionWrites);
+  const deviceCommandResult = buildBridgeFanoutResult(writeResult, Boolean(commandIntentWrite));
+  const commandSucceeded = writeResult.status === "SUCCEEDED";
+  const commandErrors = [writeResult.errors.join(" | "), deviceCommandResult.error]
+    .filter(Boolean)
+    .join(" | ");
+
+  await persistAuditEvent(
+    executionDecision,
+    commandSucceeded ? "COMMAND_DITTO_WRITE_SUCCEEDED" : "COMMAND_DITTO_WRITE_FAILED",
+    commandErrors || null,
+  );
+  const n8nStatus = await pingN8nAudit(
+    executionDecision,
+    commandSucceeded ? "COMMAND_DITTO_WRITE_SUCCEEDED" : "COMMAND_DITTO_WRITE_FAILED",
+  );
+
+  await query(
+    `UPDATE control_command_log
+        SET ditto_write_status = $1,
+            audit_status       = $2,
+            status             = $3,
+            executed_at        = $4,
+            error_message      = $5
+      WHERE command_id = $6`,
+    [
+      writeResult.status,
+      `OK/${n8nStatus}`,
+      commandSucceeded ? "DITTO_WRITE_SUCCEEDED" : "DITTO_WRITE_FAILED",
+      commandSucceeded ? new Date().toISOString() : null,
+      commandErrors || null,
+      decision.command_id,
+    ],
+  );
+
+  return NextResponse.json({
+    ok: true,
+    ...executionDecision,
+    ditto_write_status: writeResult.status,
+    ditto_write_errors: writeResult.errors,
+    device_command_status: deviceCommandResult.status,
+    device_command_topic: deviceCommandResult.topic,
+    device_command_error: deviceCommandResult.error,
+    audit_status: `OK/${n8nStatus}`,
+    twin_reachable: ditto_reachable,
+  }, { status: 200 });
+}
+
+// ---------------------------------------------------------------------------
+// GET handler: small healthcheck / version probe.
+// ---------------------------------------------------------------------------
+export async function GET() {
+  return NextResponse.json({
+    ok: true,
+    component: "command_safety_gate",
+    version: SAFETY_GATE_VERSION,
+    config: SAFETY_GATE_CONFIG,
+  });
+}
