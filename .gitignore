@@ -39,6 +39,8 @@ dist/
 build/
 out/
 coverage/
+# TypeScript incremental build cache
+*.tsbuildinfo
 
 # Logs / temp / cache
 *.log
