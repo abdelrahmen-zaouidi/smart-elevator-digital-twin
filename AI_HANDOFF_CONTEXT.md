@@ -187,7 +187,7 @@ Important files:
 - `dashboard/backend/bridge.js`: MQTT-to-Ditto bridge and Ditto command-intent reconciler; bridge owns MQTT command fanout using the `bridge` broker identity.
 - `dashboard/components/ElevatorOS.jsx`: main SCADA UI.
 - `scripts/init-ditto.ps1` and `.sh`: provision Ditto policy/Thing.
-- `N8n workflows/*.json`: six agent workflows.
+- `n8n-workflows/*.json`: six agent workflows.
 - `postgres/init/*.sql`, `postgres/migrations/*.sql`: telemetry/audit/command/maintenance schemas.
 - `docs/validation/test-matrix.md`: validation matrix.
 

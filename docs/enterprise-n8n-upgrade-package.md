@@ -76,9 +76,9 @@ Audit behavior: audit event for successful archive, invalid Ditto shape, and rep
 
 Code node replacements:
 
-- `Canonicalize Twin Event`: `N8n workflows/enterprise-upgrade-code/01_canonicalize_twin_event.js`
-- `Dedupe & Update Timeline`: `N8n workflows/enterprise-upgrade-code/01_dedupe_update_timeline.js`
-- `Prepare DB Row`: `N8n workflows/enterprise-upgrade-code/01_prepare_telemetry_params.js`
+- `Canonicalize Twin Event`: `n8n-workflows/enterprise-upgrade-code/01_canonicalize_twin_event.js`
+- `Dedupe & Update Timeline`: `n8n-workflows/enterprise-upgrade-code/01_dedupe_update_timeline.js`
+- `Prepare DB Row`: `n8n-workflows/enterprise-upgrade-code/01_prepare_telemetry_params.js`
 
 Postgres node `Archive Telemetry to Postgres`:
 
@@ -118,10 +118,10 @@ Audit behavior: audit `ANALYSIS_COMPLETED`, `DITTO_RISK_WRITE_SUCCEEDED`, and fa
 
 Code node replacements:
 
-- `Deterministic Risk Engine`: `N8n workflows/enterprise-upgrade-code/02_deterministic_risk_engine.js`
-- `LLM Context Analyzer`: `N8n workflows/enterprise-upgrade-code/02_ollama_context_analyzer.js`
-- `Finalize Risk Analysis`: `N8n workflows/enterprise-upgrade-code/02_finalize_risk_analysis.js`
-- `Action Router`: `N8n workflows/enterprise-upgrade-code/02_action_router.js`
+- `Deterministic Risk Engine`: `n8n-workflows/enterprise-upgrade-code/02_deterministic_risk_engine.js`
+- `LLM Context Analyzer`: `n8n-workflows/enterprise-upgrade-code/02_ollama_context_analyzer.js`
+- `Finalize Risk Analysis`: `n8n-workflows/enterprise-upgrade-code/02_finalize_risk_analysis.js`
+- `Action Router`: `n8n-workflows/enterprise-upgrade-code/02_action_router.js`
 
 Ditto endpoints:
 
@@ -161,8 +161,8 @@ Nodes to add:
 
 Code node replacements:
 
-- `Control Safety Gate`: `N8n workflows/enterprise-upgrade-code/03_control_safety_gate.js`
-- `Explode Ditto Writes`: `N8n workflows/enterprise-upgrade-code/03_explode_ditto_writes.js`
+- `Control Safety Gate`: `n8n-workflows/enterprise-upgrade-code/03_control_safety_gate.js`
+- `Explode Ditto Writes`: `n8n-workflows/enterprise-upgrade-code/03_explode_ditto_writes.js`
 
 Implemented connection topology (must match `03_control_agent.json`):
 
@@ -225,8 +225,8 @@ Maintenance processing:
 
 Code node replacements:
 
-- `Security State Machine`: `N8n workflows/enterprise-upgrade-code/04_security_state_machine.js`
-- `Predictive Maintenance Engine`: `N8n workflows/enterprise-upgrade-code/04_predictive_maintenance_engine.js`
+- `Security State Machine`: `n8n-workflows/enterprise-upgrade-code/04_security_state_machine.js`
+- `Predictive Maintenance Engine`: `n8n-workflows/enterprise-upgrade-code/04_predictive_maintenance_engine.js`
 
 Implemented connection topology (must match `04_security_maintenance_agents.json`):
 
@@ -287,8 +287,8 @@ Audit behavior: audit inserted, sent, retry, failed, and escalated notification 
 
 Code node replacements:
 
-- `Build Notification Outbox Rows`: `N8n workflows/enterprise-upgrade-code/05_build_notification_outbox_rows.js`
-- `Format Delivery Payload`: `N8n workflows/enterprise-upgrade-code/05_format_delivery_payload.js`
+- `Build Notification Outbox Rows`: `n8n-workflows/enterprise-upgrade-code/05_build_notification_outbox_rows.js`
+- `Format Delivery Payload`: `n8n-workflows/enterprise-upgrade-code/05_format_delivery_payload.js`
 
 Implemented connection topology (must match `05_notification_agent.json`):
 
@@ -385,8 +385,8 @@ Processing steps:
 
 Code node replacements:
 
-- `Energy Optimization Engine`: `N8n workflows/enterprise-upgrade-code/06_energy_optimization_engine.js`
-- New `Normalize Audit Event`: `N8n workflows/enterprise-upgrade-code/06_audit_event_normalizer.js`
+- `Energy Optimization Engine`: `n8n-workflows/enterprise-upgrade-code/06_energy_optimization_engine.js`
+- New `Normalize Audit Event`: `n8n-workflows/enterprise-upgrade-code/06_audit_event_normalizer.js`
 
 Audit insert:
 
@@ -422,7 +422,7 @@ Nodes to create:
 - `Check Postgres Health`: Postgres query `SELECT 'postgres' AS component, 'UP' AS status, now() AS checked_at;`
 - `Check MQTT Health`: execute command or MQTT publish/read if MQTT nodes are available
 - `Check Dashboard Health`: HTTP GET `{{ $env.DASHBOARD_URL || 'http://host.docker.internal:3000' }}`
-- `Aggregate Health Status`: `N8n workflows/enterprise-upgrade-code/07_system_health_aggregator.js`
+- `Aggregate Health Status`: `n8n-workflows/enterprise-upgrade-code/07_system_health_aggregator.js`
 - `Write Health to Ditto`: PUT `features/system_health/properties`
 - `Archive Health History`: Postgres insert into `system_health_history`
 - `Queue Audit Agent`

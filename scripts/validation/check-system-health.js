@@ -459,7 +459,7 @@ function checkSourceFiles() {
     "scripts/init-ditto.ps1",
     "scripts/validation/ensure-ditto-features.js",
     "scripts/validate_mqtt_topics.py",
-    "N8n workflows/03_control_agent.json",
+    "n8n-workflows/03_control_agent.json",
     "postgres/init/001_timescaledb.sql",
   ];
 

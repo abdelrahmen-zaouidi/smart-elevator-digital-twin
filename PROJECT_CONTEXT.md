@@ -54,8 +54,8 @@ Important workspace files and directories:
 | `dashboard/app/api/commands/route.js` | Server-side command safety endpoint. Loads Ditto twin, validates command, persists audit, writes Ditto, publishes MQTT command. | Trusted command boundary. |
 | `dashboard/app/api/ditto/[...path]/route.ts` | Next.js proxy to Ditto with Basic Auth and SSE support. | Used by browser Ditto calls. |
 | `dashboard/app/api/history/*` | History endpoints for telemetry, risk, audit, commands, notifications, maintenance, energy, system health. | Reads Postgres/Timescale data. |
-| `N8n workflows/*.json` | Exported n8n workflows: ingestion, analysis, control, security/maintenance, notification, optimization/audit. | Import into n8n manually. |
-| `N8n workflows/enterprise-upgrade-code/*.js` | Code-node logic extracted from workflows: canonicalization, risk engine, safety gate, maintenance, security, notifications, audit. | Useful for review and updates. |
+| `n8n-workflows/*.json` | Exported n8n workflows: ingestion, analysis, control, security/maintenance, notification, optimization/audit. | Import into n8n manually. |
+| `n8n-workflows/enterprise-upgrade-code/*.js` | Code-node logic extracted from workflows: canonicalization, risk engine, safety gate, maintenance, security, notifications, audit. | Useful for review and updates. |
 | `postgres/init/*.sql` | Initial database schema and enterprise upgrade schema. | Used by Postgres container init. |
 | `postgres/migrations/*.sql` | Later schema migrations including command safety gate support. | Run manually if volume predates changes. |
 | `scripts/init-ditto.ps1`, `scripts/init-ditto.sh` | Idempotent Ditto policy and Thing provisioning scripts. | Creates the elevator Thing and expected features. |
