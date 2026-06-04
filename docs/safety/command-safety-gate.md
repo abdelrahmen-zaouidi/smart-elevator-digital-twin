@@ -43,7 +43,7 @@ The Command Safety Gate is that admission layer. It is the single visible answer
 
 ## 3. Single source of truth
 
-The canonical rules live in [`dashboard/src/lib/commandSafetyGate.js`](../../dashboard/src/lib/commandSafetyGate.js). The n8n control agent uses an aligned standalone version at [`N8n workflows/enterprise-upgrade-code/03_control_safety_gate.js`](../../N8n%20workflows/enterprise-upgrade-code/03_control_safety_gate.js) (n8n Code nodes cannot `require()` external modules). Both files share the same:
+The canonical rules live in [`dashboard/src/lib/commandSafetyGate.js`](../../dashboard/src/lib/commandSafetyGate.js). The n8n control agent uses an aligned standalone version at [`n8n-workflows/enterprise-upgrade-code/03_control_safety_gate.js`](../../n8n-workflows/enterprise-upgrade-code/03_control_safety_gate.js) (n8n Code nodes cannot `require()` external modules). Both files share the same:
 
 - command allow-list,
 - rejection-reason strings (`REJECTED: <reason>`),

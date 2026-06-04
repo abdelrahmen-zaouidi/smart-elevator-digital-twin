@@ -2,7 +2,7 @@
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
-const workflowsDir = path.join(root, 'N8n workflows');
+const workflowsDir = path.join(root, 'n8n-workflows');
 const codeDir = path.join(workflowsDir, 'enterprise-upgrade-code');
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
 
