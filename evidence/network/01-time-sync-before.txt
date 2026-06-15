@@ -1,0 +1,25 @@
+﻿# PC time-sync / NTP-server state BEFORE fix (2026-06-13 17:36:27 +01:00)
+
+## Registry (key facts)
+NtpServer.Enabled        = 0   (0 = NTP server role OFF)
+Config.AnnounceFlags     = 10  (need 5 for standalone reliable server)
+NtpClient.NtpServer      = time.windows.com,0x9
+
+## w32tm /query /status (Source=Local CMOS Clock => not internet-synced)
+Indicateur de d�rive�: 3(Non synchronis�)
+Couche�: 0 (Non sp�cifi�)
+Pr�cision�: -23 (119.209ns par battement)
+D�lai de racine�: 0.0000000s
+Dispersion de racine�: 0.0000000s
+ID de r�f�rence�: 0x00000000 (Non sp�cifi�)
+Heure de la derni�re synchronisation r�ussie�: Non sp�cifi�
+Source�: Local CMOS Clock
+Intervalle d'interrogation�: 10 (1024s)
+
+
+## w32tm /stripchart /computer:192.168.10.10 (0x800705B4 = timeout => PC does NOT answer NTP yet)
+Suivi de 192.168.10.10 [192.168.10.10:123].
+Collecte de 2 �chantillons.
+L'heure actuelle est 13/06/2026 17:36:27.
+17:36:27, erreur: 0x800705B4
+17:36:30, erreur: 0x800705B4

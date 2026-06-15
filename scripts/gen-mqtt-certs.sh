@@ -2,7 +2,7 @@
 # =============================================================================
 # gen-mqtt-certs.sh  --  Local CA + Mosquitto server certificate (server-only TLS)
 # -----------------------------------------------------------------------------
-# Generates, under mosquitto_config/certs/:
+# Generates, under infra/mqtt/certs/:
 #   ca.key  ca.crt          - your private Certificate Authority
 #   server.key server.crt   - the broker's TLS server certificate, signed by the CA
 #
@@ -33,7 +33,7 @@ BROKER_EXTRA_SAN="${BROKER_EXTRA_SAN:-}"        # optional extra SANs, comma-sep
 # -----------------------------------------------------------------------------
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CERT_DIR="$SCRIPT_DIR/../mosquitto_config/certs"
+CERT_DIR="$SCRIPT_DIR/../infra/mqtt/certs"
 mkdir -p "$CERT_DIR"
 cd "$CERT_DIR"
 

@@ -1,0 +1,23 @@
+﻿# Elevator LAN topology (2026-06-13 17:36:27 +01:00)
+PC has TWO networks: Ethernet=elevator LAN (isolated), Wi-Fi=internet uplink
+
+
+IPAddress     InterfaceAlias                     PrefixLength
+---------     --------------                     ------------
+172.21.96.1   vEthernet (WSL (Hyper-V firewall))           20
+172.22.48.1   vEthernet (Default Switch)                   20
+192.168.10.10 Ethernet                                     24
+192.168.100.7 Wi-Fi                                        24
+127.0.0.1     Loopback Pseudo-Interface 1                   8
+
+
+
+
+InterfaceAlias NetworkCategory IPv4Connectivity
+-------------- --------------- ----------------
+Wi-Fi                   Public         Internet
+Ethernet                Public     LocalNetwork
+
+
+
+Gateways: elevator LAN -> 192.168.10.1 (D-Link DSL-2750U, no internet/RTC); internet -> 192.168.100.1 (Wi-Fi)

@@ -1,0 +1,14 @@
+# Live TLS handshake to 192.168.10.10:8883 with IP-SAN verification  (2026-06-13 17:13:16 +0100)
+# (same cert validation the ESP32 mbedTLS stack performs)
+depth=1 CN=SmartElevator Local CA, O=SmartElevatorTwin
+depth=0 CN=smart-elevator-mqtt, O=SmartElevatorTwin
+subject=CN=smart-elevator-mqtt, O=SmartElevatorTwin
+issuer=CN=SmartElevator Local CA, O=SmartElevatorTwin
+Verification: OK
+Verify return code: 0 (ok)
+    Protocol  : TLSv1.3
+    Cipher    : TLS_AES_256_GCM_SHA384
+    Verify return code: 0 (ok)
+    Protocol  : TLSv1.3
+    Cipher    : TLS_AES_256_GCM_SHA384
+    Verify return code: 0 (ok)

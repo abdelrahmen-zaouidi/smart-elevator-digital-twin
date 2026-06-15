@@ -14,8 +14,8 @@ secrets.h
 !**/secrets.h.example
 
 # MQTT broker auth + TLS private material (commit only templates/scripts)
-mosquitto_config/passwordfile
-mosquitto_config/certs/
+infra/mqtt/passwordfile
+infra/mqtt/certs/
 *.key
 *.pem
 *.crt

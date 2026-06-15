@@ -43,7 +43,7 @@ docker compose up -d --build
 Start the dashboard:
 
 ```powershell
-cd dashboard
+cd apps/dashboard
 npm run dev
 ```
 
@@ -555,7 +555,7 @@ Verify that the SCADA dashboard visualizes current and historical elevator state
 Start the dashboard:
 
 ```powershell
-cd dashboard
+cd apps/dashboard
 npm run dev
 ```
 

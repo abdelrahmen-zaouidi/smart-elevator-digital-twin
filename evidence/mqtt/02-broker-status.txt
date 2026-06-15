@@ -1,0 +1,14 @@
+# Broker status & TLS listener  (2026-06-13 17:13:16 +0100)
+elevator-mqtt | Up 15 minutes (healthy) | 0.0.0.0:1883->1883/tcp, [::]:1883->1883/tcp, 0.0.0.0:8883->8883/tcp, [::]:8883->8883/tcp, 0.0.0.0:9001->9001/tcp, [::]:9001->9001/tcp
+## elevator.conf 8883 listener block
+# TLS for the ESP32 over WiFi -- the only hop that crosses an untrusted network.
+# Server-only TLS: the broker presents server.crt (signed by ca.crt) and the
+# ESP32 pins ca.crt. Clients are NOT required to present a certificate
+# (require_certificate false); they authenticate with username/password.
+listener 8883
+protocol mqtt
+cafile   /mosquitto/config/certs/ca.crt
+certfile /mosquitto/config/certs/server.crt
+keyfile  /mosquitto/config/certs/server.key
+tls_version tlsv1.2
+require_certificate false

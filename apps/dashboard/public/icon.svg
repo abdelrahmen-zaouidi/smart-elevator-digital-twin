@@ -1,0 +1,10 @@
+<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ElevatorOS">
+  <rect width="180" height="180" rx="38" fill="#07141A"/>
+  <path d="M66 122H51V58H66" stroke="#64727A" stroke-width="10" stroke-linecap="square" stroke-linejoin="round"/>
+  <path d="M114 58H129V122H114" stroke="#64727A" stroke-width="10" stroke-linecap="square" stroke-linejoin="round"/>
+  <path d="M78 75L89 71V112L78 116V75Z" fill="#12C6D8"/>
+  <path d="M96 69L107 65V106L96 110V69Z" fill="#18D5E5"/>
+  <path d="M114 63L125 59V100L114 104V63Z" fill="#5FEAF2"/>
+  <circle cx="90" cy="132" r="8" fill="#EF4D43"/>
+  <path d="M56 138H124" stroke="#172833" stroke-width="5" stroke-linecap="round"/>
+</svg>

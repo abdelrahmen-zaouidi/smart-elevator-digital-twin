@@ -1,0 +1,14 @@
+<svg width="420" height="112" viewBox="0 0 420 112" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ElevatorOS">
+  <rect width="420" height="112" rx="18" fill="#07141A"/>
+  <g transform="translate(38 24)">
+    <path d="M24 43H17V21H24" stroke="#64727A" stroke-width="4" stroke-linecap="square" stroke-linejoin="round"/>
+    <path d="M40 21H47V43H40" stroke="#64727A" stroke-width="4" stroke-linecap="square" stroke-linejoin="round"/>
+    <path d="M28 27L32 25.5V40L28 41.5V27Z" fill="#12C6D8"/>
+    <path d="M35 25L39 23.5V38L35 39.5V25Z" fill="#18D5E5"/>
+    <path d="M42 23L46 21.5V36L42 37.5V23Z" fill="#5FEAF2"/>
+    <circle cx="32" cy="47" r="3" fill="#EF4D43"/>
+  </g>
+  <text x="118" y="64" fill="#7D8A90" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="40" font-weight="700" letter-spacing="-1">Elevator</text>
+  <text x="273" y="64" fill="#18D5E5" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="40" font-weight="700" letter-spacing="-1">OS</text>
+  <text x="120" y="85" fill="#64727A" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12" font-weight="700" letter-spacing="1.8">DIGITAL TWIN SCADA</text>
+</svg>

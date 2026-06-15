@@ -15,12 +15,12 @@ Scope of this baseline (the "necessary" encryption/auth for a local thesis rig):
 | bridge / n8n ↔ broker (Docker net) | username/password + ACL, plaintext 1883 | intra‑Docker, never on the wire |
 | dashboard browser ↔ broker (WS 9001) | username/password + ACL (read‑only identity) | same host; commands go via Ditto |
 | All broker clients | **anonymous disabled** | closes unauthenticated command injection |
-| Secrets at rest | gitignored `.env`, `dashboard/.env.local`, `secrets.h`, `mosquitto_config/passwordfile`, `mosquitto_config/certs/` | keep creds/keys out of source |
+| Secrets at rest | gitignored `.env`, `apps/dashboard/.env.local`, `secrets.h`, `infra/mqtt/passwordfile`, `infra/mqtt/certs/` | keep creds/keys out of source |
 | **Not done (by decision)** | Ditto HTTPS, dashboard HTTPS, intra‑Docker TLS, Mongo/Postgres at‑rest, mutual TLS, ESP32 flash‑encryption | localhost/Docker‑internal or production‑grade overkill for this prototype |
 
 ## Broker identities and ACL
 
-Defined in `mosquitto_config/aclfile`, hashed in `mosquitto_config/passwordfile`.
+Defined in `infra/mqtt/aclfile`, hashed in `infra/mqtt/passwordfile`.
 
 | User | Publish | Subscribe |
 |---|---|---|
@@ -87,11 +87,11 @@ the broker image):
 # anonymous must fail:
 docker exec elevator-mqtt mosquitto_pub -h localhost -p 1883 -t t -m x ; echo $?   # non-zero
 # TLS from the ESP subnet (replace IP); validates the CA:
-mosquitto_pub -h 192.168.100.7 -p 8883 --cafile mosquitto_config/certs/ca.crt \
+mosquitto_pub -h 192.168.100.7 -p 8883 --cafile infra/mqtt/certs/ca.crt \
   -u esp32-elevator -P "$MQTT_ESP32_PASSWORD" \
   -t elevator/building-floor1-elevator/telemetry -m '{"t":1}'
 # ACL: esp32 must NOT be able to publish a command:
-mosquitto_pub -h 192.168.100.7 -p 8883 --cafile mosquitto_config/certs/ca.crt \
+mosquitto_pub -h 192.168.100.7 -p 8883 --cafile infra/mqtt/certs/ca.crt \
   -u esp32-elevator -P "$MQTT_ESP32_PASSWORD" \
   -t elevator/building-floor1-elevator/commands -m x   # broker drops it
 ```
@@ -103,8 +103,8 @@ credentials. Order:
 
 1. Confirm secrets exist (already created here, gitignored):
    - root `.env` → `MQTT_*` passwords
-   - `dashboard/.env.local` → `NEXT_PUBLIC_MQTT_USERNAME/PASSWORD`
-   - `main_esp_32_code_smart_elevator_v6/secrets.h` → ESP32 creds
+   - `apps/dashboard/.env.local` → `NEXT_PUBLIC_MQTT_USERNAME/PASSWORD`
+   - `firmware/main_esp_32_code_smart_elevator_v6/secrets.h` → ESP32 creds
 2. Recreate the broker and the Docker clients:
    ```bash
    # --build matters: the bridge image must contain the MQTT auth code.
@@ -113,7 +113,7 @@ credentials. Order:
    ```
 3. **n8n**: set the MQTT node credentials in the n8n UI to user `agents` /
    its password (n8n stores node credentials in its own encrypted store, not env).
-4. **Dashboard**: restart `npm run dev` so it reloads `dashboard/.env.local`.
+4. **Dashboard**: restart `npm run dev` so it reloads `apps/dashboard/.env.local`.
 5. **Firmware**: ensure `secrets.h` has the ESP32 creds, flash, and confirm the
    serial log shows NTP sync + `TLS enabled: port 8883, server CA pinned` and an
    MQTT connect.
@@ -125,18 +125,18 @@ Rollback: `MQTT_USE_TLS 0` (firmware) reverts the ESP32 to 1883 auth‑only; set
 
 ```bash
 # rotate one user (example: esp32-elevator)
-docker run --rm -v "$(pwd -W)/mosquitto_config:/mc" eclipse-mosquitto:2 \
+docker run --rm -v "$(pwd -W)/infra/mqtt:/mc" eclipse-mosquitto:2 \
   mosquitto_passwd -b /mc/passwordfile esp32-elevator NEW_PASSWORD
 
 # Docker Desktop bind mounts can preserve Linux file modes from the helper
 # container. Mosquitto drops to uid 1883, so keep auth files readable only by
 # that runtime user before recreating the broker.
-docker run --rm -v "$(pwd -W)/mosquitto_config:/mc" --entrypoint chown eclipse-mosquitto:2 \
+docker run --rm -v "$(pwd -W)/infra/mqtt:/mc" --entrypoint chown eclipse-mosquitto:2 \
   1883:1883 /mc/passwordfile /mc/aclfile
-docker run --rm -v "$(pwd -W)/mosquitto_config:/mc" --entrypoint chmod eclipse-mosquitto:2 \
+docker run --rm -v "$(pwd -W)/infra/mqtt:/mc" --entrypoint chmod eclipse-mosquitto:2 \
   0600 /mc/passwordfile /mc/aclfile
 
-# update the matching value in secrets.h / .env / dashboard/.env.local, then:
+# update the matching value in secrets.h / .env / apps/dashboard/.env.local, then:
 docker compose up -d --force-recreate mosquitto
 ```
 
@@ -145,10 +145,13 @@ update `MQTT_CA_CERT` in the firmware (or `secrets.h`), re‑flash, and recreate
 
 ## Git note
 
-This project is **not currently a git repository**, so there is no committed
-history to scrub. Before you ever `git init`/push, confirm `.gitignore` is in
-place (it excludes `.env`, `.env.local`, `secrets.h`, the password file, and
-`certs/`). If the old WiFi password was ever pushed elsewhere, rotate it.
+This project is now a **git repository published to GitHub** (Apache-2.0). The
+committed `.gitignore` excludes `.env`, `apps/dashboard/.env.local`, `secrets.h`, the
+broker `passwordfile`, and `infra/mqtt/certs/` — confirm no secret has ever
+been committed before pushing (`git log -p -- .env secrets.h` and a secret scan).
+Any credential that was ever committed or pushed (e.g. an old WiFi password)
+must be **rotated**, because git history and remote mirrors persist deleted
+content. Rotation procedures for broker users and the TLS CA are below.
 
 ## Bench checklist (firmware bits not testable without hardware)
 

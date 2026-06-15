@@ -1,5 +1,15 @@
 # Chapter X: Software Design and Implementation
 
+> **Update note (2026-06-03).** This chapter was written against an earlier
+> inspection. Two facts have since changed and the following are authoritative:
+> the **MQTT broker is now authenticated, ACL-enforced, and TLS-secured on the
+> ESP32 hop** (anonymous access is disabled — see [SECURITY.md](../SECURITY.md)
+> and the [MQTT reference](mqtt-reference.md)); and the **command path is wired
+> end to end** (dashboard intent → Ditto `control/pending_command` → bridge MQTT
+> fanout). A dual-brain [AI-Adaptive Dispatch Policy Engine](features/adaptive-dispatch-engine.md)
+> and the `microcontroller` + `control` Ditto features were also added; the full
+> 12-feature surface is in the [Ditto twin reference](ditto-twin-reference.md).
+
 ## Preliminary Codebase-Based Analysis
 
 ### A. Summary of the Current Project Architecture
@@ -15,9 +25,9 @@ The simulator layer is implemented primarily in `esp32_simulator.py`, with an ad
 
 Mosquitto is configured with a TCP listener on port `1883` and a WebSocket listener on port `9001`. The project now uses a single canonical MQTT topic convention: `elevator/{mqtt_safe_thing_id}/{telemetry|events|commands|status}`. The Ditto Thing ID `building:floor1:elevator` is preserved unchanged; inside MQTT topic segments the safe form `building-floor1-elevator` is used (`:` -> `-`). The Python and embedded simulators publish to `elevator/{mqtt_safe_thing_id}/telemetry`. The bridge and dashboard subscribe fleet-wide with the single-level wildcard pattern `elevator/+/{telemetry|events|status}`. Legacy patterns such as `elevator/telemetry/{thingId}`, `elevator/telemetry/+`, and `elevator/telemetry/#` are deprecated; the bridge still accepts `MQTT_TOPIC` overrides for backwards compatibility, but no first-class component publishes or subscribes to them by default.
 
-The Digital Twin synchronization is handled by Eclipse Ditto through the Ditto HTTP API path pattern `/api/2/things/{thingId}`. The Node bridge in `dashboard/backend/bridge.js` subscribes to MQTT, normalizes telemetry payloads, maps field aliases into Ditto feature properties, and writes feature or attribute updates to Ditto with retry logic and duplicate-write suppression. The active dashboard component, `dashboard/components/ElevatorOS.jsx`, reads from live MQTT and Ditto state through custom hooks and sends operator commands through the Ditto REST API proxy.
+The Digital Twin synchronization is handled by Eclipse Ditto through the Ditto HTTP API path pattern `/api/2/things/{thingId}`. The Node bridge in `services/ditto-bridge/bridge.js` subscribes to MQTT, normalizes telemetry payloads, maps field aliases into Ditto feature properties, and writes feature or attribute updates to Ditto with retry logic and duplicate-write suppression. The active dashboard component, `apps/dashboard/components/ElevatorOS.jsx`, reads from live MQTT and Ditto state through custom hooks and sends operator commands through the Ditto REST API proxy.
 
-The dashboard is a Next.js application using React, Tailwind CSS, Recharts, Lucide icons, and local UI components. The active page entry is `dashboard/app/page.tsx`, which renders `ElevatorOS`. This component includes Digital Twin, Monitoring, Control, Analytics, Alerts, Logs, Devices/Sensors, Reports, Settings, and Help/About pages. The codebase also contains older or reusable SCADA components under `dashboard/components/scada`, but the active route uses the monolithic `ElevatorOS.jsx` implementation.
+The dashboard is a Next.js application using React, Tailwind CSS, Recharts, Lucide icons, and local UI components. The active page entry is `apps/dashboard/app/page.tsx`, which renders `ElevatorOS`. This component includes Digital Twin, Monitoring, Control, Analytics, Alerts, Logs, Devices/Sensors, Reports, Settings, and Help/About pages. The codebase also contains older or reusable SCADA components under `apps/dashboard/components/scada`, but the active route uses the monolithic `ElevatorOS.jsx` implementation.
 
 The AI automation layer is represented by exported n8n workflows and Code-node scripts. The workflows include ingestion/surveillance, analysis, control, security and maintenance, notification, optimization, and audit agents. The design uses deterministic rule-based analysis as the authority for risk and control decisions, with optional local Ollama LLM support for explanatory analysis only. PostgreSQL/TimescaleDB tables support telemetry archiving, audit logs, notification outbox records, control command logs, maintenance work orders, and system health history.
 
@@ -51,9 +61,9 @@ Validation performed during this analysis:
 
 1. Eclipse Ditto deployment files are not present in this repository. The project assumes an existing Ditto stack reachable through `http://docker-nginx-1` inside Docker or `http://localhost` from the host.
 2. Ditto policy definitions are not included in the repository. Therefore, policy enforcement can be discussed architecturally, but concrete project policies cannot be described as implemented unless they exist in the external Ditto deployment.
-3. The root `docker-compose.yml` mounts `./mosquitto_config/mosquitto.conf`, while the repository stores the Mosquitto configuration under `mosquitto/mosquitto_config/mosquitto.conf`. This should be verified before relying on Compose startup from the repository root.
+3. The root `docker-compose.yml` mounts the `./infra/mqtt` directory at `/mosquitto/config` and starts the broker with `elevator.conf` (authenticated, ACL-enforced, with TLS on the ESP32 listener). The earlier stale duplicate at `mosquitto/infra/mqtt/mosquitto.conf` has been removed; see [SECURITY.md](../SECURITY.md) and the [MQTT reference](mqtt-reference.md).
 4. The dashboard and Eclipse Ditto are not defined as services in the inspected Compose file. The chapter should describe the deployment as a partially containerized local stack unless additional Compose files exist elsewhere.
-5. The project request mentions Framer Motion, but `framer-motion` is not present in `dashboard/package.json` and no imports were found. The dashboard currently uses CSS, Tailwind animation utilities, and SVG animation instead.
+5. The project request mentions Framer Motion, but `framer-motion` is not present in `apps/dashboard/package.json` and no imports were found. The dashboard currently uses CSS, Tailwind animation utilities, and SVG animation instead.
 6. The n8n ingestion workflow currently polls Ditto on a schedule. This is functional for a local thesis system, but an event-driven Ditto events or MQTT-triggered workflow would be more appropriate for production.
 7. MQTT topics are now standardised on the canonical convention `elevator/{mqtt_safe_thing_id}/{telemetry|events|commands|status}` across the simulator, bridge, dashboard, and Docker Compose configuration. The Ditto Thing ID is unchanged; topic segments use the safe form (e.g. `building-floor1-elevator`).
 8. The login/logout mechanism is a frontend local session stored in browser storage. It is not yet a production identity provider or role-based access control system.
@@ -90,7 +100,7 @@ The automation layer is implemented through n8n workflows. These workflows repre
 | Communication | Mosquitto, `mqttClient.js`, `bridge.js` | Transport JSON telemetry and normalize MQTT messages |
 | Digital Twin | Eclipse Ditto API, `dittoApi.js`, `useDitto.js` | Store and expose authoritative twin state |
 | Dashboard | `app/page.tsx`, `components/ElevatorOS.jsx` | Operator visualization, alerts, and commands |
-| Automation | `N8n workflows/*.json`, Code-node scripts | AI/rule-based analysis, control routing, maintenance, notifications |
+| Automation | `workflows/n8n/*.json`, Code-node scripts | AI/rule-based analysis, control routing, maintenance, notifications |
 | Persistence | TimescaleDB/PostgreSQL migrations | Telemetry history, audit logs, outbox, work orders |
 | Deployment | `docker-compose.yml`, `.env.example` | Local service orchestration and configuration |
 
@@ -143,7 +153,7 @@ The embedded sketch mirrors the Python simulator concept using ESP8266 Wi-Fi, Pu
 
 The communication layer uses MQTT as the ingestion protocol. MQTT is suitable for IoT systems because it is lightweight, supports publish/subscribe decoupling, and can operate over unreliable networks with reconnect behavior. In this project, the simulator publishes JSON telemetry to Mosquitto, and consumers such as the bridge, dashboard, and automation workflows can subscribe without tightly coupling themselves to the device implementation.
 
-The Mosquitto configuration exposes a TCP listener on port `1883` and a WebSocket listener on port `9001`. The WebSocket listener allows the browser-based dashboard to connect to MQTT through the `mqtt` JavaScript client. The current broker configuration allows anonymous access, which is acceptable for local development but should be replaced with authentication and TLS in a production environment.
+The Mosquitto configuration exposes a TCP listener on port `1883` and a WebSocket listener on port `9001`. The WebSocket listener allows the browser-based dashboard to connect to MQTT through the `mqtt` JavaScript client. The broker (`infra/mqtt/elevator.conf`) requires authentication, enforces per-identity ACLs, and offers TLS on the ESP32-facing listener (8883); anonymous access is disabled. (This corrects the earlier development configuration — see [SECURITY.md](../SECURITY.md).)
 
 The Node bridge subscribes to configured topics, normalizes telemetry, and writes the resulting state to Ditto. The dashboard MQTT client subscribes to the configured topic patterns and updates local UI state when live telemetry is available. However, according to the architecture, MQTT should remain the ingestion layer, while Ditto remains the authoritative state layer.
 
@@ -174,7 +184,7 @@ The current repository does not include Ditto policy definitions. Therefore, the
 
 ## 7. Dashboard Layer
 
-The dashboard layer is implemented as a React/Next.js SCADA-style interface. The active route is `dashboard/app/page.tsx`, which renders the `ElevatorOS` component. This component acts as the main operator console and contains the Digital Twin engine, page navigation, command handlers, telemetry charts, alerts, logs, settings, and local frontend session management.
+The dashboard layer is implemented as a React/Next.js SCADA-style interface. The active route is `apps/dashboard/app/page.tsx`, which renders the `ElevatorOS` component. This component acts as the main operator console and contains the Digital Twin engine, page navigation, command handlers, telemetry charts, alerts, logs, settings, and local frontend session management.
 
 The dashboard presents operational data in a form suitable for supervision. It shows the current floor, target floor, direction, motor health, temperature, vibration, load, risk score, security alert level, and connection status. It also displays charts using Recharts, status pills, incident cards, command logs, and telemetry timelines. The UI includes pages for Digital Twin visualization, monitoring, control, analytics, alerts, logs, devices/sensors, reports, settings, and help/about.
 
@@ -205,7 +215,7 @@ The MQTT service `src/services/mqttClient.js` manages the browser MQTT connectio
 
 The Ditto service `src/services/dittoApi.js` wraps calls to Ditto through the dashboard proxy. It provides GET and PUT operations for Things, features, and attributes, includes Basic Auth, disables caching, and retries failed requests. The `useDitto` hook can use Server-Sent Events when enabled and otherwise falls back to REST polling. It also keeps a heartbeat polling mechanism when SSE is connected, which reduces the risk of a frozen SCADA state.
 
-The backend bridge `dashboard/backend/bridge.js` is an important service component. It subscribes to MQTT topics, accepts several payload shapes, normalizes aliases such as `vibration_g` to `vibration_level` and `payload_weight_kg` to `load_kg`, extracts a Thing ID, and writes only meaningful feature or attribute updates to Ditto. It includes retry logic and skips unchanged serialized payloads per path to reduce unnecessary Ditto writes.
+The backend bridge `services/ditto-bridge/bridge.js` is an important service component. It subscribes to MQTT topics, accepts several payload shapes, normalizes aliases such as `vibration_g` to `vibration_level` and `payload_weight_kg` to `load_kg`, extracts a Thing ID, and writes only meaningful feature or attribute updates to Ditto. It includes retry logic and skips unchanged serialized payloads per path to reduce unnecessary Ditto writes.
 
 **Table X.6: API and Service Modules**
 
@@ -248,7 +258,7 @@ The security and maintenance workflows analyze RFID failures, forced door events
 
 The local deployment architecture is partially containerized. The inspected `docker-compose.yml` defines Mosquitto, n8n, TimescaleDB/PostgreSQL, optional Ollama, optional Adminer, and optional Grafana. These services are suitable for local thesis experimentation because they allow repeatable startup of the main infrastructure dependencies.
 
-The Compose file expects an external Docker network named `docker_default`, which is also used to reach an external Eclipse Ditto stack through `docker-nginx-1`. This means Ditto is part of the overall project architecture, but its service definition is not contained in the inspected Compose file. Similarly, the Next.js dashboard is not included as a Compose service and is expected to run from the `dashboard` directory using scripts such as `npm run dev`, `npm run start`, or `npm run bridge`.
+The Compose file expects an external Docker network named `docker_default`, which is also used to reach an external Eclipse Ditto stack through `docker-nginx-1`. This means Ditto is part of the overall project architecture, but its service definition is not contained in the inspected Compose file. Similarly, the Next.js dashboard is not included as a Compose service and is expected to run from the `dashboard` directory using scripts such as `npm run dev`, `npm run start`, or `node services/ditto-bridge/bridge.js`.
 
 **Table X.8: Docker Compose Services**
 
@@ -269,7 +279,7 @@ The project includes several security-related concepts, but the current implemen
 
 Ditto API access is protected in the dashboard proxy using Basic Auth credentials loaded from environment variables. This avoids hardcoding Ditto credentials in dashboard logic, but the current public environment fallback values are still development defaults. Production deployment should use secret management and should avoid exposing credentials to browser-side code.
 
-Mosquitto currently allows anonymous access. This is acceptable for a local isolated thesis environment, but production MQTT communication should use username/password or certificate authentication, TLS, topic-level authorization, and separate device identities. The embedded sketch also requires security improvement because its Wi-Fi and broker settings are currently hardcoded.
+Mosquitto enforces username/password authentication and per-identity topic ACLs, with server-only TLS on the ESP32 hop (port 8883); anonymous access is disabled. Remaining production hardening (per-device X.509, TLS on the intra-Docker and WS listeners, role-separated Ditto policies, dashboard OIDC) is enumerated in [SECURITY.md](../SECURITY.md). The embedded sketch still requires security improvement because its Wi-Fi and broker settings are currently hardcoded.
 
 The n8n workflows implement safety-oriented control logic. The Control Agent validates commands, checks target floor boundaries, blocks movement during lockdown or emergency stop, requires reasons and correlation IDs, and requires human approval for certain high-risk actions. This is an important software safety mechanism, but it should complement rather than replace proper device-side safety interlocks.
 
@@ -285,24 +295,24 @@ This section summarizes the main implementation files and their role in the glob
 |---|---|---|---|
 | `esp32_simulator.py` | Main Python elevator simulator | Environment variables, internal state machine, anomaly probabilities | Publishes MQTT JSON Ditto envelopes and writes `runtime/live-twin.json` |
 | `ELEVATOR_SIMULATOR_ESP8266.ino` | Embedded simulator sketch | Wi-Fi, MQTT broker, internal elevator model | Publishes similar JSON telemetry from an ESP8266-style device |
-| `mosquitto/mosquitto_config/mosquitto.conf` | MQTT broker configuration | Broker startup | Opens MQTT TCP and WebSocket listeners |
+| `infra/mqtt/elevator.conf` (+ `aclfile`, `passwordfile`, `certs/`) | MQTT broker configuration | Broker startup | Authenticated + ACL-enforced; TLS on the ESP32 listener (8883) |
 | `docker-compose.yml` | Local service orchestration | `.env` variables and Docker profiles | Runs Mosquitto, n8n, TimescaleDB, and optional local tools |
-| `dashboard/app/page.tsx` | Next.js page entry | Browser request | Renders the active `ElevatorOS` dashboard |
-| `dashboard/components/ElevatorOS.jsx` | Main SCADA application | Ditto state, MQTT telemetry, operator actions | Displays state, charts, alerts, logs, commands, settings, and simulation fallback |
-| `dashboard/src/config/env.js` | Dashboard configuration | Environment variables | Provides Ditto, MQTT, polling, SSE, and simulation settings |
-| `dashboard/src/services/mqttClient.js` | MQTT browser service | WebSocket broker and topic patterns | Emits parsed telemetry and connection status |
-| `dashboard/src/hooks/useMqtt.js` | React MQTT hook | Callback and enabled state | Provides MQTT connection state and last message |
-| `dashboard/src/services/dittoApi.js` | Ditto API client | Feature, attribute, and Thing requests | Sends proxied REST requests to Ditto with retries |
-| `dashboard/src/hooks/useDitto.js` | Ditto synchronization hook | Thing ID, polling/SSE settings | Provides Thing state and connection status to the dashboard |
-| `dashboard/app/api/ditto/[...path]/route.ts` | Next.js Ditto proxy | Browser GET/PUT/POST requests | Forwards requests to Ditto with Basic Auth and error handling |
-| `dashboard/backend/bridge.js` | MQTT-to-Ditto bridge | MQTT JSON messages | Normalizes telemetry and writes Ditto features/attributes |
-| `N8n workflows/*.json` | Workflow exports | Webhooks, schedules, Ditto responses, database rows | Implements agent orchestration for analysis, control, maintenance, security, notification, audit |
-| `N8n workflows/enterprise-upgrade-code/*.js` | n8n Code-node logic | Workflow JSON input items and environment variables | Risk scoring, action routing, command validation, maintenance scoring, notifications, audit normalization |
-| `postgres/init/001_timescaledb.sql` | Initial database schema | PostgreSQL startup | Creates telemetry, audit, outbox, and continuous aggregates |
-| `postgres/migrations/002_enterprise_iot_upgrade.sql` | Upgrade migration | Existing PostgreSQL schema | Adds correlation IDs, command logs, work orders, system health history, indexes |
-| `tools/validate_n8n_upgrade_package.js` | Workflow validation script | Workflow JSON and Code-node scripts | Validates node references and Code-node syntax |
-| `tools/apply_n8n_enterprise_upgrade.js` | Workflow update script | Workflow files and Code-node scripts | Applies workflow upgrades and endpoint expressions |
-| `tools/start_dashboard_bridge.ps1` | Bridge startup helper | Local environment values | Starts the Node bridge with local MQTT and Ditto settings |
+| `apps/dashboard/app/page.tsx` | Next.js page entry | Browser request | Renders the active `ElevatorOS` dashboard |
+| `apps/dashboard/components/ElevatorOS.jsx` | Main SCADA application | Ditto state, MQTT telemetry, operator actions | Displays state, charts, alerts, logs, commands, settings, and simulation fallback |
+| `apps/dashboard/src/config/env.js` | Dashboard configuration | Environment variables | Provides Ditto, MQTT, polling, SSE, and simulation settings |
+| `apps/dashboard/src/services/mqttClient.js` | MQTT browser service | WebSocket broker and topic patterns | Emits parsed telemetry and connection status |
+| `apps/dashboard/src/hooks/useMqtt.js` | React MQTT hook | Callback and enabled state | Provides MQTT connection state and last message |
+| `apps/dashboard/src/services/dittoApi.js` | Ditto API client | Feature, attribute, and Thing requests | Sends proxied REST requests to Ditto with retries |
+| `apps/dashboard/src/hooks/useDitto.js` | Ditto synchronization hook | Thing ID, polling/SSE settings | Provides Thing state and connection status to the dashboard |
+| `apps/dashboard/app/api/ditto/[...path]/route.ts` | Next.js Ditto proxy | Browser GET/PUT/POST requests | Forwards requests to Ditto with Basic Auth and error handling |
+| `services/ditto-bridge/bridge.js` | MQTT-to-Ditto bridge | MQTT JSON messages | Normalizes telemetry and writes Ditto features/attributes |
+| `workflows/n8n/*.json` | Workflow exports | Webhooks, schedules, Ditto responses, database rows | Implements agent orchestration for analysis, control, maintenance, security, notification, audit |
+| `workflows/n8n/enterprise-upgrade-code/*.js` | n8n Code-node logic | Workflow JSON input items and environment variables | Risk scoring, action routing, command validation, maintenance scoring, notifications, audit normalization |
+| `infra/postgres/init/001_timescaledb.sql` | Initial database schema | PostgreSQL startup | Creates telemetry, audit, outbox, and continuous aggregates |
+| `infra/postgres/migrations/002_enterprise_iot_upgrade.sql` | Upgrade migration | Existing PostgreSQL schema | Adds correlation IDs, command logs, work orders, system health history, indexes |
+| `scripts/validate_n8n_upgrade_package.js` | Workflow validation script | Workflow JSON and Code-node scripts | Validates node references and Code-node syntax |
+| `scripts/apply_n8n_enterprise_upgrade.js` | Workflow update script | Workflow files and Code-node scripts | Applies workflow upgrades and endpoint expressions |
+| `scripts/start_dashboard_bridge.ps1` | Bridge startup helper | Local environment values | Starts the Node bridge with local MQTT and Ditto settings |
 
 The implementation demonstrates a clear separation of concerns. The simulator generates telemetry; MQTT transports telemetry; the bridge writes normalized state to Ditto; Ditto stores the current twin state; the dashboard reads and commands through Ditto; n8n workflows analyze, route, notify, and audit; PostgreSQL persists historical and operational records.
 
@@ -333,7 +343,7 @@ The first limitation is that the deployment is local and partially containerized
 
 The second limitation is that the main telemetry source is a simulator rather than a real elevator. The simulator is useful for development and testing because it produces consistent and controllable telemetry, but it cannot fully validate mechanical behavior, sensor noise, actuator response, safety relays, or real elevator controller integration.
 
-The third limitation concerns security. The current MQTT broker allows anonymous access, the dashboard authentication is local frontend state, and the embedded sketch contains hardcoded network configuration. These choices are acceptable for local development but must be replaced before production deployment.
+The third limitation concerns security. The MQTT broker is now authenticated, ACL-enforced, and TLS-secured on the ESP32 hop, but the dashboard authentication is still local frontend state and the embedded sketch contains hardcoded network configuration. These remaining choices are acceptable for local development but must be replaced before production deployment (see [SECURITY.md](../SECURITY.md)).
 
 The fourth limitation is that the n8n ingestion workflow currently uses scheduled polling of Ditto. This is simpler to operate locally, but a production event-driven architecture should use Ditto events, MQTT triggers, or webhook-based event dispatch to reduce latency and unnecessary polling.
 

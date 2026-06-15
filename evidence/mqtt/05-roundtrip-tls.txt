@@ -1,0 +1,6 @@
+# End-to-end TLS round-trip on 192.168.10.10:8883  (2026-06-13 17:13:16 +0100)
+# pub as esp32-elevator (ACL: telemetry write) -> sub as agents (ACL: telemetry read)
+# (credentials read from secrets.h/.env at runtime; not stored here)
+{"src":"evidence-tls-roundtrip","floor":2,"state":"MOVING_UP"}
+TLS publish exit=0
+TLS subscribe receive exit=0 (0=message received over TLS)

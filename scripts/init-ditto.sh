@@ -98,7 +98,7 @@ esac
 # energy/performance/predicted_failures/ai_analysis/maintenance_schedule are
 # seeded with zero defaults so the dashboard never sees undefined fields.
 # ---------------------------------------------------------------------------
-echo "[3/3] Provisioning Thing ${THING_ID} (12 features)..."
+echo "[3/3] Provisioning Thing ${THING_ID} (13 features)..."
 
 HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
   -X PUT \
@@ -141,6 +141,15 @@ HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
         "alert_level": "NORMAL"
       }
     },
+    "accessControl": {
+      "properties": {
+        "authorizedTags": {},
+        "recentAccessLog": [],
+        "tag_count": 0,
+        "log_seq": 0,
+        "updated_at": null
+      }
+    },
     "microcontroller": {
       "properties": {
         "board": "ESP32-S3",
@@ -163,7 +172,25 @@ HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
       }
     },
     "control": {
-      "properties": {}
+      "properties": {
+        "dispatch_policy": {
+          "active_policy": "SCAN_COLLECTIVE",
+          "previous_policy": null,
+          "selected_at": null,
+          "min_dwell_until": null,
+          "confidence": 0,
+          "reason": "default policy at provisioning",
+          "overridden_by": null,
+          "active_brain": "scorer_v1",
+          "manual_override": null,
+          "params": {
+            "park_floor": null, "direction_bias": 0, "accel_profile": "NORMAL",
+            "speed_cap_ms": 1.6, "dwell_ms": 5000, "grace_ms": 1200,
+            "deep_idle": false, "force_fan": false, "restrict_floors": false
+          },
+          "shadow": {}
+        }
+      }
     },
     "energy": {
       "properties": {

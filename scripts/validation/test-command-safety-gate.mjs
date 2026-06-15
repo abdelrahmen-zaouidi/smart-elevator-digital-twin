@@ -6,7 +6,7 @@
  * Run from repo root:
  *     node scripts/validation/test-command-safety-gate.mjs
  *
- * Each test exercises one rule in dashboard/src/lib/commandSafetyGate.js.
+ * Each test exercises one rule in packages/shared/commandSafetyGate.js.
  * The suite verifies BOTH that accepted commands carry a Ditto-write plan
  * AND that rejected commands carry zero Ditto writes — i.e. the gate cannot
  * "fail open".
@@ -28,7 +28,7 @@ import {
   COMMAND_CATALOG,
   ALLOWED_SOURCES,
   _resetCooldownLedgerForTests,
-} from "../../dashboard/src/lib/commandSafetyGate.js";
+} from "../../packages/shared/commandSafetyGate.js";
 
 // -----------------------------------------------------------------------------
 // Fixtures

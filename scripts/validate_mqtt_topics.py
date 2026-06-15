@@ -59,8 +59,8 @@ LEGACY_ALLOWED_FILES = {
     ".env.example",
     # esp32_simulator.py and bridge.js contain deprecation notes that
     # explicitly reference the legacy topic strings.
-    "esp32_simulator.py",
-    "dashboard/backend/bridge.js",
+    "services/simulator/esp32_simulator.py",
+    "services/ditto-bridge/bridge.js",
 }
 
 # Canonical topics that MUST appear in these reference files.
@@ -75,7 +75,7 @@ EXPECTED_TOPICS = {
     "docker-compose.yml": [
         "elevator/+/telemetry",
     ],
-    "dashboard/.env.example": [
+    "apps/dashboard/.env.example": [
         "elevator/+/telemetry",
         "elevator/building-floor1-elevator/telemetry",
     ],

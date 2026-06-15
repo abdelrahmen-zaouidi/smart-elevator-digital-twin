@@ -8,6 +8,25 @@
 > the present chapter intentionally focuses on architecture and design
 > decisions rather than file-by-file implementation walkthroughs.
 
+> **Update note (2026-06-03).** This chapter records the architecture as inspected
+> on 2026-05-09. Several surfaces have since advanced; where this chapter's prose
+> still describes the earlier state, the following are authoritative:
+>
+> - **MQTT security is now implemented**, not deferred. Anonymous access is
+>   **disabled**; every client authenticates with a username/password and is
+>   constrained by `infra/mqtt/aclfile`; the ESP32 ↔ broker hop uses TLS on
+>   port 8883 (`infra/mqtt/elevator.conf`). See [SECURITY.md](../SECURITY.md)
+>   and the [MQTT reference](mqtt-reference.md). (Supersedes §2.7 / §2.14 / §2.17.)
+> - **The command (desired-state) path is now wired end to end.** The dashboard
+>   writes command intent to `control/properties/pending_command`; the bridge
+>   reconciles it and fans out the MQTT command as the `bridge` identity.
+>   (Supersedes the "planned bridge" notes in §2.5 / §2.13.)
+> - **The Thing now has 12 features** (adds `microcontroller` and `control`); see
+>   the [Ditto twin reference](ditto-twin-reference.md). (Supersedes "ten features".)
+> - **An AI-Adaptive Dispatch Policy Engine** (dual-brain champion/challenger) was
+>   added; its intent lives at `control/properties/dispatch_policy`. See
+>   [features/adaptive-dispatch-engine.md](features/adaptive-dispatch-engine.md).
+
 ---
 
 ## 2.1 Introduction
@@ -63,7 +82,7 @@ flowchart LR
 
     subgraph Ingest["Messaging and ingestion"]
         MQ["Mosquitto<br/>MQTT broker<br/>1883 / 9001"]
-        BR["Bridge<br/>dashboard/backend/bridge.js"]
+        BR["Bridge<br/>services/ditto-bridge/bridge.js"]
     end
 
     subgraph Twin["Digital Twin (operational source of truth)"]
@@ -131,7 +150,7 @@ non-functional split.
 | Class | ID | Requirement | Source / motivation |
 |---|---|---|---|
 | Functional | FR-01 | Acquire elevator telemetry (motion, door, motor, security, energy) from the embedded controller using JSON over MQTT. | Field instrumentation; cross-vendor interoperability. |
-| Functional | FR-02 | Maintain the authoritative elevator state in Eclipse Ditto as a Thing with attributes and ten features (`cabin`, `door`, `motor`, `security`, `incident_log`, `energy`, `performance`, `predicted_failures`, `ai_analysis`, `maintenance_schedule`). | Twin abstraction; consistent state surface for all consumers. |
+| Functional | FR-02 | Maintain the authoritative elevator state in Eclipse Ditto as a Thing with attributes and twelve features (`cabin`, `door`, `motor`, `security`, `microcontroller`, `incident_log`, `control`, `energy`, `performance`, `predicted_failures`, `ai_analysis`, `maintenance_schedule`). | Twin abstraction; consistent state surface for all consumers. |
 | Functional | FR-03 | Provide a web SCADA dashboard that visualizes live and historical state and exposes operator commands. | Operator supervision and control. |
 | Functional | FR-04 | Route operator commands through Ditto and a deterministic safety gate before any device-side application. | Safety, audit, and human-in-the-loop control. |
 | Functional | FR-05 | Persist telemetry, audit, command, work-order, and notification records in TimescaleDB for at-rest analytics. | Compliance and post-incident analysis. |
@@ -164,11 +183,11 @@ the rest of the system.
 |---|---|---|---|---|
 | L1 | Physical and embedded acquisition | Sense, actuate, debounce, time-stamp | Sensors, ESP32 firmware, `ELEVATOR_SIMULATOR_ESP8266.ino` (validation only) | Ditto-shaped JSON envelope on MQTT |
 | L2 | Communication / messaging | Transport, fan-out, durability | Mosquitto, topic conventions | MQTT 3.1.1 over TCP and WS |
-| L3 | Bridge and normalization | Schema unification, alias resolution, idempotent twin writes | `dashboard/backend/bridge.js` | Ditto REST `PUT /api/2/things/...` |
+| L3 | Bridge and normalization | Schema unification, alias resolution, idempotent twin writes | `services/ditto-bridge/bridge.js` | Ditto REST `PUT /api/2/things/...` |
 | L4 | Digital Twin | Authoritative state, addressability, policy, eventing | Eclipse Ditto, `scripts/init-ditto.sh`, `scripts/init-ditto.ps1` | HTTP API + Ditto SSE |
-| L5 | Agentic automation | Risk, control, security, maintenance, notification, audit, optimization | `N8n workflows/*.json` and `enterprise-upgrade-code/*.js` | Webhooks + Ditto API + Postgres |
+| L5 | Agentic automation | Risk, control, security, maintenance, notification, audit, optimization | `workflows/n8n/*.json` and `enterprise-upgrade-code/*.js` | Webhooks + Ditto API + Postgres |
 | L6 | Persistence and analytics | History, aggregation, audit, outbox | TimescaleDB hypertables and continuous aggregates | SQL |
-| L7 | Operator interface | Visualization and command intent | `dashboard/app/page.tsx` rendering `dashboard/components/ElevatorOS.jsx` | Browser HTTP/WS, Ditto proxy |
+| L7 | Operator interface | Visualization and command intent | `apps/dashboard/app/page.tsx` rendering `apps/dashboard/components/ElevatorOS.jsx` | Browser HTTP/WS, Ditto proxy |
 
 The ordering is intentional: information flows L1 → L4 by default, then fans
 out from L4 to L5, L6, and L7 in parallel; commands flow L7 → L4 → L5 → L4
@@ -287,24 +306,36 @@ exposes both a TCP listener and a WebSocket listener — the latter being a
 hard requirement for any in-browser MQTT client that the dashboard might
 need.
 
-The Mosquitto configuration in `mosquitto/mosquitto_config/mosquitto.conf`
-is intentionally minimal:
+The active Mosquitto configuration is `infra/mqtt/elevator.conf`. It is
+**authenticated and ACL-enforced**, with TLS on the ESP32-facing listener
+(the original `allow_anonymous true` development config has been superseded —
+see the update note above and [SECURITY.md](../SECURITY.md)):
 
 ```conf
-listener 1883
-allow_anonymous true
+allow_anonymous false
+password_file /mosquitto/config/passwordfile
+acl_file /mosquitto/config/aclfile
 
-listener 9001
+listener 1883            # plaintext, intra-Docker only (auth + ACL still enforced)
+protocol mqtt
+
+listener 9001            # WebSockets for the browser dashboard (auth + ACL)
 protocol websockets
+
+listener 8883            # TLS for the ESP32 over WiFi (server-only TLS, CA pinned in firmware)
+protocol mqtt
+cafile   /mosquitto/config/certs/ca.crt
+certfile /mosquitto/config/certs/server.crt
+keyfile  /mosquitto/config/certs/server.key
+tls_version tlsv1.2
+require_certificate false
 ```
 
-This configuration is appropriate for a single-host development stack and
-inappropriate for production. Section 2.14 enumerates the hardening steps
-(authentication, ACL, TLS, dedicated device identities) that must precede
-any real deployment. The Compose service in `docker-compose.yml` mounts the
-file at `./mosquitto_config/mosquitto.conf/mosquitto.conf`, opens the two
-listener ports, declares a `mosquitto_pub`-based health check, and joins
-both the project's default network and the external `ditto_network`.
+The Compose service in `docker-compose.yml` mounts the whole config directory at
+`/mosquitto/config` (read-only), points the broker at `elevator.conf`, opens the
+three listener ports (1883/8883/9001), declares an authenticated
+`mosquitto_pub`-based health check (the `healthcheck` ACL user), and joins both
+the project's default network and the external `ditto_network`.
 
 **Topic conventions.** The project standardises on a single canonical
 topic pattern:
@@ -319,7 +350,7 @@ form `building-floor1-elevator` so that segment names do not collide
 with the `:` namespace separator that complicates wildcard ACLs. The
 mapping is implemented by `thing_id_to_mqtt_id()` / `mqtt_id_to_thing_id()`
 helpers in both the Python simulator (`esp32_simulator.py`) and the
-Node bridge (`dashboard/backend/bridge.js`).
+Node bridge (`services/ditto-bridge/bridge.js`).
 
 | Topic | Direction | Used by |
 |---|---|---|
@@ -359,9 +390,12 @@ multi-tenant deployment can be built.
 `building:floor1:elevator` (configurable via `PRIMARY_THING_ID`). Its
 attributes describe slowly-varying or device-identity information
 (`location`, `manufacturer`, `model`, `serialNumber`); its features
-decompose the elevator into ten subsystems whose properties are written
-independently. The `scripts/init-ditto.sh` script provisions the Thing
-idempotently:
+decompose the elevator into twelve subsystems whose properties are written
+independently. The class diagram below shows the original ten telemetry/analysis
+features; the current scripts also provision `microcontroller` (ESP32 presence)
+and `control` (command intent + dispatch policy) — see the
+[Ditto twin reference](ditto-twin-reference.md#5-features) for the full surface.
+The `scripts/init-ditto.sh` script provisions the Thing idempotently:
 
 ```mermaid
 classDiagram
@@ -497,7 +531,7 @@ Next.js Ditto proxy route, and the historical-data API routes.
 
 ### 2.9.1 The MQTT-to-Ditto bridge
 
-The bridge in `dashboard/backend/bridge.js` is a single-process Node
+The bridge in `services/ditto-bridge/bridge.js` is a single-process Node
 service that subscribes to the configured MQTT topics, normalizes the
 incoming payloads, and writes the result to Ditto through the REST API.
 Its design exhibits four properties that are non-negotiable for an
@@ -557,7 +591,7 @@ sequenceDiagram
 
 The browser cannot talk to Ditto directly without exposing credentials and
 without dealing with CORS. The dashboard therefore routes all Ditto traffic
-through `dashboard/app/api/ditto/[...path]/route.ts`, a catch-all Next.js
+through `apps/dashboard/app/api/ditto/[...path]/route.ts`, a catch-all Next.js
 Route Handler that injects HTTP Basic Auth from server-side environment
 variables, strips hop-by-hop headers, distinguishes ordinary REST requests
 from `text/event-stream` SSE requests (treating the timeout as a
@@ -569,7 +603,7 @@ that should be removed before production.
 
 ### 2.9.3 Historical data routes
 
-A second family of API routes under `dashboard/app/api/history/*`
+A second family of API routes under `apps/dashboard/app/api/history/*`
 (`audit`, `commands`, `energy`, `maintenance`, `notifications`, `risk`,
 `summary`, `system-health`, `telemetry`) reads from TimescaleDB and serves
 aggregated history to the dashboard. These routes are the read-side
@@ -582,8 +616,8 @@ counterpart to the n8n agents' write-side: agents persist, the API reads.
 Telemetry, audit records, control commands, work orders, notifications, and
 system-health checks are persisted in a single TimescaleDB instance running
 on PostgreSQL 15 (`timescale/timescaledb:latest-pg15`). The schema is
-established by `postgres/init/001_timescaledb.sql` and extended by
-idempotent migrations (`postgres/migrations/002_…`, `003_…`, `004_…`).
+established by `infra/postgres/init/001_timescaledb.sql` and extended by
+idempotent migrations (`infra/postgres/migrations/002_…`, `003_…`, `004_…`).
 
 The schema decomposes into three logical groups.
 
@@ -640,10 +674,10 @@ debugging; it is not part of the production data path.
 
 Agentic automation is implemented in n8n, a free, self-hostable workflow
 runtime. The repository ships six exported workflows under
-`N8n workflows/`, each representing a single agent with a single
+`workflows/n8n/`, each representing a single agent with a single
 responsibility. Each agent's logic is implemented in JavaScript Code nodes
 whose source is also vendored separately under
-`N8n workflows/enterprise-upgrade-code/` for code review and testing.
+`workflows/n8n/enterprise-upgrade-code/` for code review and testing.
 
 | # | Workflow | Trigger | Mandate |
 |---|---|---|---|
@@ -714,16 +748,16 @@ Thing, configuring its embedded controller, adding its identifier to
 
 The operator-facing surface is a Next.js application using React 18,
 Tailwind CSS, Recharts, and a local component library. The active route
-is `dashboard/app/page.tsx`, which renders `dashboard/components/ElevatorOS.jsx`
+is `apps/dashboard/app/page.tsx`, which renders `apps/dashboard/components/ElevatorOS.jsx`
 — a single composite component that hosts the digital twin view, the
 monitoring page, the control panel, the analytics page, the alerts and
 logs pages, the devices and sensors view, the reports page, the settings
 page, and a help/about screen. Reusable building blocks — primitives,
-panels, charts — live under `dashboard/components/scada` and `components/ui`.
+panels, charts — live under `apps/dashboard/components/scada` and `components/ui`.
 
 **State acquisition.** The dashboard never reads from MQTT for its
 authoritative state; it reads from Ditto. This is implemented by the
-`useDitto` hook (`dashboard/src/hooks/useDitto.js`), which prefers Ditto
+`useDitto` hook (`apps/dashboard/src/hooks/useDitto.js`), which prefers Ditto
 Server-Sent Events when `NEXT_PUBLIC_DITTO_SSE_ENABLED` is true and falls
 back to REST polling at a configurable interval otherwise. Even when SSE
 is connected, a low-frequency heartbeat poll guards against silently
@@ -735,7 +769,7 @@ the visualisations in *Digital Twin*, *Monitoring*, *Analytics*, and
 **Command issuance.** Operator commands — emergency stop, lockdown,
 maintenance mode, resume, target-floor reposition, fire recall — are
 expressed by writing to Ditto features and attributes through the
-`dittoApi` service (`dashboard/src/services/dittoApi.js`), which goes
+`dittoApi` service (`apps/dashboard/src/services/dittoApi.js`), which goes
 through the proxy route described in Section 2.9.2. The dashboard
 *intentionally* does not publish to MQTT command topics, because doing so
 would bypass the n8n control safety gate and the audit trail. Local
@@ -987,14 +1021,14 @@ and repeatable. The Arduino sketch exists chiefly to validate that the
 chosen payload shape can be produced by an embedded toolchain with
 modest libraries (`PubSubClient`, `ArduinoJson`).
 
-**Workflow validation.** `tools/validate_n8n_upgrade_package.js` parses
+**Workflow validation.** `scripts/validate_n8n_upgrade_package.js` parses
 every exported workflow JSON and every Code-node script, checking node
 references and JavaScript syntax. The script is intended to be run in
 CI before any workflow change is merged, since exported n8n workflows
 are JSON whose internal node identifiers are easy to break by hand.
 
 **Type safety.** The dashboard is a TypeScript project; `npx tsc --noEmit`
-inside `dashboard/` enforces type safety across hooks, services, and API
+inside `apps/dashboard/` enforces type safety across hooks, services, and API
 routes. A green `tsc` run is a pre-condition for considering a UI change
 ready to merge.
 

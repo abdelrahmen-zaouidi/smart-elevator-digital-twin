@@ -1,0 +1,8 @@
+# Windows Firewall inbound rules for 8883 (non-elevated best-effort)  (2026-06-13 17:15:15 +0100)
+
+## Note: Docker Desktop publishes 8883 on 0.0.0.0 via com.docker.backend.exe and
+## installs its own allow rules. Prior LAN deployments (192.168.100.7:8883) worked
+## with this same Docker setup, so the firewall is not the active blocker. If, after
+## the cert fix, the ESP32 shows a TCP timeout (not a TLS cert error), re-check the
+## Public-profile inbound allow rule for TCP 8883 (run elevated):
+##   New-NetFirewallRule -DisplayName 'MQTT TLS 8883 (elevator LAN)' -Direction Inbound -Protocol TCP -LocalPort 8883 -Action Allow -Profile Any

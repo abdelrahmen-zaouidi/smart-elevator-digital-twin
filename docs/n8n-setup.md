@@ -78,7 +78,7 @@ Only needed when `EMAIL_ENABLED=true` in `.env`.
 ## Step 3 — Import Workflow Files
 
 1. Go to **Workflows → Import from File**
-2. Import each file from `n8n-workflows/` **in this order**:
+2. Import each file from `workflows/n8n/` **in this order**:
 
 | # | File | Description |
 |---|------|-------------|
@@ -298,7 +298,7 @@ The dashboard reads `features/ai_analysis/properties` for the **AI Insights** pa
 | Node shows orange credential dot after import | Credential ID in JSON doesn't match fresh install | Re-attach credential manually in the node editor |
 | Workflow 01 executions fail with DB connection error | POSTGRES_* vars not in n8n container | Run `docker compose down && docker compose up -d`; confirm vars with `docker exec elevator_agents env \| grep POSTGRES` |
 | `$env.DITTO_BASE_URL` is undefined in expressions | n8n container missing the var | Check `docker compose ps n8n`; ensure container restarted after `docker-compose.yml` edit |
-| Telegram node fails with `chat_id is empty` | Active workflow still uses old `$env.TELEGRAM_CHAT_ID` expression, or Telegram is enabled without `TELEGRAM_CHAT_ID` | Re-import `n8n-workflows/05_notification_agent.json`, restart n8n, and confirm `TELEGRAM_CHAT_ID` is set in `.env` |
+| Telegram node fails with `chat_id is empty` | Active workflow still uses old `$env.TELEGRAM_CHAT_ID` expression, or Telegram is enabled without `TELEGRAM_CHAT_ID` | Re-import `workflows/n8n/05_notification_agent.json`, restart n8n, and confirm `TELEGRAM_CHAT_ID` is set in `.env` |
 | Workflow 02 always uses deterministic engine | `LOCAL_LLM_ENABLED=false` or Ollama not running | Start with `docker compose --profile ai up -d`; pull model |
 | Workflow 03 never fires control commands | `risk_score` below `MAX_RISK_AUTO_CONTROL` | Lower threshold in `.env` for testing; restart n8n container |
 | Execution history shows red for workflow 06 | `audit_log` missing `workflow_name` column | Run `002_enterprise_iot_upgrade.sql` migration (see SETUP.md) |

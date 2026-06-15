@@ -1,0 +1,190 @@
+{
+  "id": "ml_v1",
+  "version": "trained-2026-05-31",
+  "trained_at": "2026-05-31T20:49:15.762Z",
+  "training_rows": 4000,
+  "metrics": {
+    "imitation_agreement": 0.664,
+    "epochs": 250,
+    "lr": 0.5,
+    "l2": 0.001
+  },
+  "policies": {
+    "SCAN_COLLECTIVE": {
+      "bias": 0.41961,
+      "weights": {
+        "up_down_ratio": 0.1054,
+        "lobby_origin_fraction": -0.57774,
+        "pending_norm": 0.0718,
+        "longest_wait_norm": -0.5937,
+        "demand_floor_norm": 0.2937,
+        "tariff_peak": -0.31844,
+        "tariff_offpeak": 0.43434,
+        "power_ratio_excess": -0.50294,
+        "budget_used": -0.08768,
+        "motor_temp_norm": -0.42675,
+        "vibration_norm": -0.35974,
+        "rul_low": -0.48439,
+        "bearing_wear": -0.1736,
+        "capacity": 0.19087,
+        "hour_sin": 0.30526,
+        "hour_cos": 0.59518,
+        "is_weekend": 0.3896
+      }
+    },
+    "UP_PEAK": {
+      "bias": -0.81155,
+      "weights": {
+        "up_down_ratio": 2.36258,
+        "lobby_origin_fraction": 2.38617,
+        "pending_norm": 1.14065,
+        "longest_wait_norm": -0.06609,
+        "demand_floor_norm": -0.10124,
+        "tariff_peak": 0.03669,
+        "tariff_offpeak": 0.16283,
+        "power_ratio_excess": -0.80831,
+        "budget_used": -0.32966,
+        "motor_temp_norm": -0.58955,
+        "vibration_norm": -0.39023,
+        "rul_low": -0.5299,
+        "bearing_wear": -0.26888,
+        "capacity": -0.13433,
+        "hour_sin": -0.07475,
+        "hour_cos": -0.04361,
+        "is_weekend": -0.7586
+      }
+    },
+    "DOWN_PEAK": {
+      "bias": 0.61711,
+      "weights": {
+        "up_down_ratio": -3.10458,
+        "lobby_origin_fraction": -0.31301,
+        "pending_norm": 2.17721,
+        "longest_wait_norm": 0.20797,
+        "demand_floor_norm": -0.38947,
+        "tariff_peak": 0.12338,
+        "tariff_offpeak": 0.31169,
+        "power_ratio_excess": -0.63571,
+        "budget_used": 0.12765,
+        "motor_temp_norm": -0.40653,
+        "vibration_norm": -0.43009,
+        "rul_low": -0.34911,
+        "bearing_wear": -0.30053,
+        "capacity": 0.1462,
+        "hour_sin": 0.22789,
+        "hour_cos": 0.24192,
+        "is_weekend": 0.56529
+      }
+    },
+    "ECO_ENERGY": {
+      "bias": 0.16655,
+      "weights": {
+        "up_down_ratio": 0.21839,
+        "lobby_origin_fraction": -0.51977,
+        "pending_norm": -2.06228,
+        "longest_wait_norm": -0.2456,
+        "demand_floor_norm": 0.10838,
+        "tariff_peak": 2.1822,
+        "tariff_offpeak": -1.2549,
+        "power_ratio_excess": 2.36825,
+        "budget_used": 0.22382,
+        "motor_temp_norm": -0.39962,
+        "vibration_norm": -0.35579,
+        "rul_low": -0.38678,
+        "bearing_wear": -0.2045,
+        "capacity": -0.07776,
+        "hour_sin": -0.17475,
+        "hour_cos": -0.25081,
+        "is_weekend": 0.14895
+      }
+    },
+    "NEAREST_GREEDY": {
+      "bias": 0.20692,
+      "weights": {
+        "up_down_ratio": 0.19435,
+        "lobby_origin_fraction": -0.22485,
+        "pending_norm": -2.0531,
+        "longest_wait_norm": 0.62004,
+        "demand_floor_norm": 0.24874,
+        "tariff_peak": -1.21796,
+        "tariff_offpeak": 0.80592,
+        "power_ratio_excess": 0.54235,
+        "budget_used": 0.05727,
+        "motor_temp_norm": -0.31447,
+        "vibration_norm": -0.29719,
+        "rul_low": -0.25872,
+        "bearing_wear": -0.20222,
+        "capacity": 0.06067,
+        "hour_sin": 0.20333,
+        "hour_cos": 0.622,
+        "is_weekend": 0.19651
+      }
+    },
+    "HEALTH_LIMP": {
+      "bias": -0.87754,
+      "weights": {
+        "up_down_ratio": -0.18125,
+        "lobby_origin_fraction": -0.27788,
+        "pending_norm": -0.02094,
+        "longest_wait_norm": -0.17259,
+        "demand_floor_norm": -0.22505,
+        "tariff_peak": -0.03819,
+        "tariff_offpeak": 0.02294,
+        "power_ratio_excess": -0.52365,
+        "budget_used": -0.28569,
+        "motor_temp_norm": 2.54589,
+        "vibration_norm": 2.31889,
+        "rul_low": 2.48932,
+        "bearing_wear": 1.44899,
+        "capacity": -0.24346,
+        "hour_sin": -0.13526,
+        "hour_cos": -0.15905,
+        "is_weekend": -0.81453
+      }
+    },
+    "BALANCED_INTERFLOOR": {
+      "bias": 0.05541,
+      "weights": {
+        "up_down_ratio": 0.09423,
+        "lobby_origin_fraction": -0.00882,
+        "pending_norm": 0.09055,
+        "longest_wait_norm": 0.08143,
+        "demand_floor_norm": 0.14901,
+        "tariff_peak": -0.8316,
+        "tariff_offpeak": -0.68813,
+        "power_ratio_excess": 0.30422,
+        "budget_used": 0.09299,
+        "motor_temp_norm": -0.13111,
+        "vibration_norm": -0.11331,
+        "rul_low": -0.10805,
+        "bearing_wear": -0.08416,
+        "capacity": 0.05155,
+        "hour_sin": -0.32138,
+        "hour_cos": -1.18941,
+        "is_weekend": 0.06527
+      }
+    },
+    "SECURITY_RESTRICTED": {
+      "bias": 0.22349,
+      "weights": {
+        "up_down_ratio": 0.31088,
+        "lobby_origin_fraction": -0.46409,
+        "pending_norm": 0.65611,
+        "longest_wait_norm": 0.16854,
+        "demand_floor_norm": -0.08407,
+        "tariff_peak": 0.06393,
+        "tariff_offpeak": 0.20531,
+        "power_ratio_excess": -0.74421,
+        "budget_used": 0.20128,
+        "motor_temp_norm": -0.27785,
+        "vibration_norm": -0.37254,
+        "rul_low": -0.37238,
+        "bearing_wear": -0.2151,
+        "capacity": 0.00625,
+        "hour_sin": -0.03034,
+        "hour_cos": 0.18377,
+        "is_weekend": 0.2075
+      }
+    }
+  }
+}

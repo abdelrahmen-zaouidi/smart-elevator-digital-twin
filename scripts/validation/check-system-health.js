@@ -55,7 +55,7 @@ function readEnvFile(relativePath) {
 function mergeEnv() {
   return {
     ...readEnvFile(".env"),
-    ...readEnvFile(path.join("dashboard", ".env.local")),
+    ...readEnvFile(path.join("apps", "dashboard", ".env.local")),
     ...process.env,
   };
 }
@@ -454,12 +454,12 @@ function checkSourceFiles() {
   console.log("\nRepository validation helpers");
   const files = [
     "docker-compose.yml",
-    "dashboard/backend/bridge.js",
+    "services/ditto-bridge/bridge.js",
     "esp32_simulator.py",
     "scripts/init-ditto.ps1",
     "scripts/validation/ensure-ditto-features.js",
     "scripts/validate_mqtt_topics.py",
-    "n8n-workflows/03_control_agent.json",
+    "workflows/n8n/03_control_agent.json",
     "postgres/init/001_timescaledb.sql",
   ];
 

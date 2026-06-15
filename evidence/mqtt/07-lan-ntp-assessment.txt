@@ -1,0 +1,12 @@
+# Elevator-LAN internet/NTP reachability (affects whether NTP works on ESP32)  (2026-06-13 17:13:16 +0100)
+## Default routes (which interface reaches the internet)
+
+ifIndex NextHop       RouteMetric InterfaceAlias
+------- -------       ----------- --------------
+     21 192.168.10.1            0 Ethernet      
+     20 192.168.100.1           0 Wi-Fi         
+
+
+
+## D-Link gateway 192.168.10.1 reachable from host?
+gateway 192.168.10.1: REACHABLE

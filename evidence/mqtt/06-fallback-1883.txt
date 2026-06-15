@@ -1,0 +1,4 @@
+# 1883 plaintext local-lab fallback (auth-only, no TLS/NTP)  (2026-06-13 17:13:16 +0100)
+good creds publish exit: 0
+wrong-password attempt (must be refused):
+Connection error: Connection Refused: not authorised

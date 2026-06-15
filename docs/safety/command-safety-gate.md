@@ -23,7 +23,7 @@ The Command Safety Gate is that admission layer. It is the single visible answer
        ▼                   ▼                   │
 ┌────────────────────────────────────────────┐ │
 │       DETERMINISTIC COMMAND SAFETY GATE     │◀┘
-│       dashboard/src/lib/commandSafetyGate.js│
+│       packages/shared/commandSafetyGate.js│
 │       N8n .../03_control_safety_gate.js     │
 │  - allow-list                               │
 │  - source, role, mode, risk, twin freshness │
@@ -43,7 +43,7 @@ The Command Safety Gate is that admission layer. It is the single visible answer
 
 ## 3. Single source of truth
 
-The canonical rules live in [`dashboard/src/lib/commandSafetyGate.js`](../../dashboard/src/lib/commandSafetyGate.js). The n8n control agent uses an aligned standalone version at [`n8n-workflows/enterprise-upgrade-code/03_control_safety_gate.js`](../../n8n-workflows/enterprise-upgrade-code/03_control_safety_gate.js) (n8n Code nodes cannot `require()` external modules). Both files share the same:
+The canonical rules live in [`packages/shared/commandSafetyGate.js`](../../packages/shared/commandSafetyGate.js). The n8n control agent uses an aligned standalone version at [`workflows/n8n/enterprise-upgrade-code/03_control_safety_gate.js`](../../workflows/n8n/enterprise-upgrade-code/03_control_safety_gate.js) (n8n Code nodes cannot `require()` external modules). Both files share the same:
 
 - command allow-list,
 - rejection-reason strings (`REJECTED: <reason>`),
@@ -55,8 +55,8 @@ The canonical rules live in [`dashboard/src/lib/commandSafetyGate.js`](../../das
 ### 4.1 Operator command from the dashboard
 
 1. Operator clicks `Emergency Stop` (or any other button on the Command Center page).
-2. The button calls `submitCommand({...})` in `dashboard/src/services/commandClient.js`.
-3. The browser POSTs to `/api/commands` (Next.js route in `dashboard/app/api/commands/route.js`).
+2. The button calls `submitCommand({...})` in `apps/dashboard/src/services/commandClient.js`.
+3. The browser POSTs to `/api/commands` (Next.js route in `apps/dashboard/app/api/commands/route.js`).
 4. The route:
    1. fetches the current Ditto Thing state (or marks `ditto_reachable:false`),
    2. runs `validateCommand(...)`,
@@ -152,7 +152,7 @@ The dashboard route currently advances commands as far as `DITTO_WRITE_SUCCEEDED
 
 ## 8. Database persistence
 
-Migration `postgres/migrations/005_command_safety_gate.sql` extends `control_command_log` so every decision — *including rejections* — is persisted with full context.
+Migration `infra/postgres/migrations/005_command_safety_gate.sql` extends `control_command_log` so every decision — *including rejections* — is persisted with full context.
 
 New columns:
 

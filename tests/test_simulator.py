@@ -16,7 +16,7 @@ import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO_ROOT))
+sys.path.insert(0, str(REPO_ROOT / "services" / "simulator"))
 
 import esp32_simulator as sim  # noqa: E402  (import after sys.path tweak)
 
@@ -26,6 +26,8 @@ def _make_cfg(**overrides):
     base = dict(
         mqtt_host="127.0.0.1",
         mqtt_port=1883,
+        mqtt_username="",
+        mqtt_password="",
         mqtt_topic="elevator/building-floor1-elevator/telemetry",
         mqtt_events_topic="elevator/building-floor1-elevator/events",
         mqtt_commands_topic="elevator/building-floor1-elevator/commands",
@@ -349,6 +351,121 @@ class TestRuntimeArtifacts(unittest.TestCase):
         self.assertTrue(cfg.snapshot_file.exists())
         contents = cfg.snapshot_file.read_text(encoding="utf-8")
         self.assertIn(cfg.thing_id, contents)
+
+
+class TestDispatchPolicy(unittest.TestCase):
+    """The device honours DISPATCH_POLICY params from the AI engine."""
+
+    def _phy(self, **overrides):
+        cfg = _make_cfg(anomaly_profile="disabled",
+                        anomaly_rates=dict(sim.ANOMALY_PROFILES["disabled"]),
+                        **overrides)
+        return sim.ElevatorPhysics(cfg, random.Random(7)), cfg
+
+    def test_default_policy_is_scan_collective(self):
+        phy, _ = self._phy()
+        self.assertEqual(phy.dispatch.policy_id, "SCAN_COLLECTIVE")
+        self.assertIsNone(phy.dispatch.park_floor)
+
+    def test_apply_policy_sets_params(self):
+        phy, _ = self._phy()
+        phy.apply_dispatch_policy("UP_PEAK", {
+            "park_floor": 0, "direction_bias": 1, "accel_profile": "NORMAL",
+            "speed_cap_ms": 1.6, "dwell_ms": 5000,
+        })
+        self.assertEqual(phy.dispatch.policy_id, "UP_PEAK")
+        self.assertEqual(phy.dispatch.park_floor, 0)
+        self.assertEqual(phy.dispatch.direction_bias, 1)
+        self.assertIsNotNone(phy.dispatch.applied_at)
+
+    def test_park_floor_clamped_to_building(self):
+        phy, cfg = self._phy()
+        phy.apply_dispatch_policy("DOWN_PEAK", {"park_floor": 99, "direction_bias": -1})
+        self.assertEqual(phy.dispatch.park_floor, cfg.num_floors - 1)
+
+    def test_gentle_profile_halves_accel_and_decel(self):
+        phy, cfg = self._phy()
+        phy.apply_dispatch_policy("HEALTH_LIMP", {"accel_profile": "GENTLE"})
+        self.assertAlmostEqual(phy._eff_accel(), cfg.accel_ms2 * 0.5)
+        self.assertAlmostEqual(phy._eff_decel(), cfg.decel_ms2 * 0.5)
+
+    def test_speed_cap_limits_effective_max_speed(self):
+        phy, cfg = self._phy()
+        phy.apply_dispatch_policy("HEALTH_LIMP", {"speed_cap_ms": 1.0})
+        self.assertEqual(phy._eff_max_speed(), 1.0)
+        # A cap above the mechanical max cannot exceed it.
+        phy.apply_dispatch_policy("SCAN_COLLECTIVE", {"speed_cap_ms": 99.0})
+        self.assertEqual(phy._eff_max_speed(), cfg.max_speed_ms)
+
+    def test_eco_dwell_extends_door_hold(self):
+        phy, cfg = self._phy()
+        phy.apply_dispatch_policy("ECO_ENERGY", {"dwell_ms": 7000})
+        self.assertGreater(phy._eff_dwell(), cfg.door_open_dwell_s)
+
+    def test_direction_bias_breaks_idle_ties_upward(self):
+        phy, _ = self._phy()
+        phy.current_floor = 1
+        phy.direction = sim.Direction.IDLE
+        phy._call_queue = [0, 3]                 # one below, one above
+        phy.apply_dispatch_policy("UP_PEAK", {"direction_bias": 1})
+        phy._pick_next_target()
+        self.assertEqual(phy.target_floor, 3)    # upward call chosen
+
+    def test_direction_bias_breaks_idle_ties_downward(self):
+        phy, _ = self._phy()
+        phy.current_floor = 2
+        phy.direction = sim.Direction.IDLE
+        phy._call_queue = [0, 3]
+        phy.apply_dispatch_policy("DOWN_PEAK", {"direction_bias": -1})
+        phy._pick_next_target()
+        self.assertEqual(phy.target_floor, 0)    # downward call chosen
+
+    def test_should_park_when_away_from_park_floor(self):
+        phy, _ = self._phy()
+        phy.current_floor = 3
+        phy.apply_dispatch_policy("UP_PEAK", {"park_floor": 0})
+        self.assertTrue(phy._should_park())
+        phy.current_floor = 0
+        self.assertFalse(phy._should_park())
+
+    def test_restrict_floors_only_serves_allowed_floor(self):
+        phy, _ = self._phy()
+        phy.current_floor = 2
+        phy._call_queue = [0, 1, 3]
+        phy.apply_dispatch_policy("SECURITY_RESTRICTED", {"park_floor": 0, "restrict_floors": True})
+        phy._pick_next_target()
+        self.assertEqual(phy.target_floor, 0)
+        # restricted floors were dropped from the queue
+        self.assertNotIn(1, phy._call_queue)
+        self.assertNotIn(3, phy._call_queue)
+
+    def test_command_payload_applies_policy(self):
+        phy, _ = self._phy()
+        applied = sim.handle_command_payload(
+            phy,
+            '{"command":"DISPATCH_POLICY","policy_id":"ECO_ENERGY",'
+            '"params":{"park_floor":2,"accel_profile":"GENTLE","deep_idle":true}}',
+        )
+        self.assertTrue(applied)
+        self.assertEqual(phy.dispatch.policy_id, "ECO_ENERGY")
+        self.assertEqual(phy.dispatch.park_floor, 2)
+        self.assertTrue(phy.dispatch.deep_idle)
+
+    def test_command_payload_ignores_junk(self):
+        phy, _ = self._phy()
+        self.assertFalse(sim.handle_command_payload(phy, "not json"))
+        self.assertFalse(sim.handle_command_payload(phy, '{"command":"MOVE_TO_FLOOR"}'))
+        # unchanged
+        self.assertEqual(phy.dispatch.policy_id, "SCAN_COLLECTIVE")
+
+    def test_payload_reports_device_applied_policy(self):
+        phy, cfg = self._phy()
+        phy.apply_dispatch_policy("UP_PEAK", {"park_floor": 0, "direction_bias": 1})
+        payload = sim.build_ditto_payload(phy, cfg)
+        applied = payload["value"]["control"]["properties"]["device_applied_policy"]
+        self.assertEqual(applied["policy_id"], "UP_PEAK")
+        self.assertEqual(applied["park_floor"], 0)
+        self.assertEqual(applied["direction_bias"], 1)
 
 
 if __name__ == "__main__":

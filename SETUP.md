@@ -137,8 +137,8 @@ Done. Thing building:floor1:elevator is provisioned.
 The dashboard runs on the host (not in Docker) so Next.js fast-refresh works:
 
 ```bash
-cd dashboard
-cp .env.example .env.local    # already done if you see dashboard/.env.local
+cd apps/dashboard
+cp .env.example .env.local    # already done if you see apps/dashboard/.env.local
 npm install                   # first time only
 npm run dev
 ```
@@ -151,7 +151,7 @@ Open [http://localhost:3000](http://localhost:3000).
 
 1. Open [http://localhost:5678](http://localhost:5678)
 2. Create your owner account on first visit
-3. Go to **Settings → Import** and import each file from `N8n workflows/`:
+3. Go to **Settings → Import** and import each file from `workflows/n8n/`:
    - `01_ingestion_surveillance_agent.json`
    - `02_analysis_ai_brain_agent.json`
    - `03_control_agent.json`
@@ -237,26 +237,34 @@ and **motor** panels should show live values updating every ~3 seconds.
 
 ## Database migrations
 
-On a **fresh** database, Docker auto-applies all SQL files from `postgres/init/`
+On a **fresh** database, Docker auto-applies all SQL files from `infra/postgres/init/`
 in alphabetical order:
 1. `001_timescaledb.sql` — base schema (hypertable, continuous aggregates)
 2. `002_enterprise_iot_upgrade.sql` — enterprise tables (agent_state, command_log, etc.)
 
 If your `pg_data` Docker volume already exists, Docker will not re-run files from
-`postgres/init/`. Apply the idempotent migrations manually in order:
+`infra/postgres/init/`. Apply the idempotent migrations manually in order:
 ```bash
 docker exec -i elevator_db psql -U admin -d smart_building \
-  < postgres/migrations/002_enterprise_iot_upgrade.sql
+  < infra/postgres/migrations/002_enterprise_iot_upgrade.sql
 docker exec -i elevator_db psql -U admin -d smart_building \
-  < postgres/migrations/003_phase4_policies.sql
+  < infra/postgres/migrations/003_phase4_policies.sql
 docker exec -i elevator_db psql -U admin -d smart_building \
-  < postgres/migrations/004_notification_outbox_contract.sql
+  < infra/postgres/migrations/004_notification_outbox_contract.sql
+docker exec -i elevator_db psql -U admin -d smart_building \
+  < infra/postgres/migrations/005_command_safety_gate.sql
+docker exec -i elevator_db psql -U admin -d smart_building \
+  < infra/postgres/migrations/006_dispatch_policy_engine.sql
 ```
 
 The migrations are fully idempotent (`IF NOT EXISTS` / `CREATE OR REPLACE`
 where appropriate). `004_notification_outbox_contract.sql` repairs older
 notification outbox tables that are missing `sent_at`, which is required by
 workflow `05_notification_agent` when marking a delivery as sent.
+`005_command_safety_gate.sql` extends `control_command_log` for the
+[command safety gate](docs/safety/command-safety-gate.md);
+`006_dispatch_policy_engine.sql` adds the dispatch decision/outcome stores and
+model registry for the [adaptive dispatch engine](docs/features/adaptive-dispatch-engine.md).
 
 ---
 
@@ -341,7 +349,7 @@ Apply the migration once on existing databases:
 
 ```bash
 docker exec -i elevator_db psql -U admin -d smart_building \
-  < postgres/migrations/005_command_safety_gate.sql
+  < infra/postgres/migrations/005_command_safety_gate.sql
 ```
 
 Run the safety-gate test suite (no broker / dashboard needed):
@@ -359,6 +367,39 @@ MAX_TWIN_AGE_SECONDS=10
 COMMAND_COOLDOWN_SECONDS=3
 COMMAND_REQUIRE_REASON=true
 COMMAND_AUDIT_ENABLED=true
+```
+
+## Adaptive Dispatch Engine (optional)
+
+The dual-brain **AI-Adaptive Dispatch Policy Engine** selects the dispatch
+*logic* for the live context and exposes it in the twin
+(`features/control/properties/dispatch_policy`). Brain A (deterministic scorer)
+is the active champion; Brain B (ML) trains in shadow and is promoted only after
+it provably wins. Full spec:
+[`docs/features/adaptive-dispatch-engine.md`](docs/features/adaptive-dispatch-engine.md).
+
+```bash
+# Migration is applied with the others above (006_dispatch_policy_engine.sql).
+# Provision Ditto seeds control/dispatch_policy: scripts/init-ditto.{sh,ps1}.
+
+# Run the live loop (Brain A active, Brain B shadow) from apps/dashboard/:
+node services/dispatch/dispatchEngine.mjs        # add --once --dry-run to preview
+
+# Train + evaluate the ML challenger (no broker needed):
+node scripts/dispatch/generate-training-data.mjs --n 4000
+node scripts/dispatch/train-brain-b.mjs
+node scripts/dispatch/evaluate-brains.mjs --n 2000   # prints the promotion-gate report
+
+# Promote only after the gates pass + human review (rollback = flip back):
+#   DISPATCH_ACTIVE_BRAIN=ml_v1 node services/dispatch/dispatchEngine.mjs    # rollback: scorer_v1
+```
+
+Run the dispatch test suites (no Docker / MQTT needed):
+
+```bash
+node --test scripts/validation/test-dispatch-policy-engine.mjs
+node --test scripts/validation/test-dispatch-safety-gate.mjs
+node --test scripts/validation/test-dispatch-orchestrator.mjs
 ```
 
 ## Remaining known limitations (Phase 1)
