@@ -1,0 +1,29 @@
+# Host network & MQTT listeners  (2026-06-13 17:13:16 +0100)
+## IPv4 addresses
+
+IPAddress     InterfaceAlias                     PrefixLength
+---------     --------------                     ------------
+172.21.96.1   vEthernet (WSL (Hyper-V firewall))           20
+172.22.48.1   vEthernet (Default Switch)                   20
+192.168.10.10 Ethernet                                     24
+192.168.100.7 Wi-Fi                                        24
+127.0.0.1     Loopback Pseudo-Interface 1                   8
+
+
+
+## Connectivity profiles
+
+InterfaceAlias NetworkCategory IPv4Connectivity
+-------------- --------------- ----------------
+Wi-Fi                   Public         Internet
+Ethernet                Public     LocalNetwork
+
+
+
+## Listeners on 1883/8883 (0.0.0.0 = exposed to LAN)
+  TCP    0.0.0.0:1883           0.0.0.0:0              LISTENING       11708
+  TCP    0.0.0.0:8883           0.0.0.0:0              LISTENING       11708
+  TCP    [::]:1883              [::]:0                 LISTENING       11708
+  TCP    [::]:8883              [::]:0                 LISTENING       11708
+  TCP    [::1]:1883             [::]:0                 LISTENING       8876
+  TCP    [::1]:8883             [::]:0                 LISTENING       8876

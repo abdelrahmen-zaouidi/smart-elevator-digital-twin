@@ -1,0 +1,12 @@
+{
+  "name": "@smart-elevator/dispatch-engine",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone dual-brain dispatch engine loop (champion + shadow). Reads the Eclipse Ditto twin, plans dispatch policy via @smart-elevator/shared, and posts intents through the command safety gate.",
+  "scripts": {
+    "start": "node dispatchEngine.mjs",
+    "once": "node dispatchEngine.mjs --once",
+    "dry-run": "node dispatchEngine.mjs --dry-run"
+  }
+}

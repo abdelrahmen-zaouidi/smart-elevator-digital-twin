@@ -90,7 +90,7 @@ Expected evidence:
 ## 6. Start Dashboard
 
 ```powershell
-cd dashboard
+cd apps/dashboard
 npm run dev
 ```
 

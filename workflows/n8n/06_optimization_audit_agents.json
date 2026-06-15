@@ -1,0 +1,642 @@
+{
+  "name": "06_optimization_audit_agents",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "3e3431ce-e90f-459a-808c-349631127fa3",
+      "name": "Schedule: Predictive Dispatch Every 15m",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        3648,
+        1584
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ ($env.DITTO_BASE_URL || 'http://docker-nginx-1') + '/api/2/things/' + ($env.PRIMARY_THING_ID || 'building:floor1:elevator') }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "a3f8cc50-727c-4440-bf5e-74f516532be6",
+      "name": "GET Current Thing for Dispatch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        3872,
+        1584
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "DHKgydzDWawM8nkx",
+          "name": "Authentication"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT $1::text AS thing_id, $2::smallint AS current_floor, $3::text AS system_mode, $4::smallint AS risk_score, $5::text AS direction, $6::text AS door_state, COALESCE(mode() WITHIN GROUP (ORDER BY current_floor), 0) AS demand_floor, COUNT(*) AS samples FROM telemetry_raw WHERE thing_id = $1 AND EXTRACT(HOUR FROM time) = $7 AND EXTRACT(DOW FROM time) = $8 AND load_kg > 50 AND time >= NOW() - INTERVAL '30 days';",
+        "options": {
+          "queryReplacement": "={{ [$json.thing_id || $json.thingId || $env.PRIMARY_THING_ID || 'building:floor1:elevator', $json.current_floor || 0, $json.system_mode || 'NORMAL', $json.risk_score || 0, $json.direction || 'NONE', $json.door_state || 'CLOSED', $json.current_hour || new Date().getHours(), $json.weekday || new Date().getDay()] }}"
+        }
+      },
+      "id": "fc8cffb7-49ec-4967-8db3-bd7b8e90d52b",
+      "name": "Query Demand Floor",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        4320,
+        1584
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "Y3xIBg0WwpRKadx2",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.should_dispatch }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "bb4847c1-1cfa-4bd8-8eb4-189185b5c6b5",
+      "name": "Route: Dispatch?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        4768,
+        1584
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://n8n:5678/webhook/control-agent",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "2e5f4c3f-89f3-4e90-bb09-b482f34ed3b9",
+      "name": "Queue Predictive Dispatch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        4992,
+        1584
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
+          ]
+        }
+      },
+      "id": "803d3c52-04fa-4348-ab33-6d6f0701e0f9",
+      "name": "Schedule: Energy Optimization Every 15m",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        3648,
+        1904
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ ($env.DITTO_BASE_URL || 'http://docker-nginx-1') + '/api/2/things/' + ($env.PRIMARY_THING_ID || 'building:floor1:elevator') }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "c368aa54-7e8b-4ea6-b3a5-42823ff57642",
+      "name": "GET Current Thing for Energy",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        3872,
+        1904
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "DHKgydzDWawM8nkx",
+          "name": "Authentication"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT $1::text AS thing_id, $2::real AS current_power_kw, $3::real AS current_draw_a, $4::real AS current_vibration_g, $5::text AS system_mode, COALESCE(AVG(power_kw), 0) AS baseline_power_kw, COALESCE(AVG(current_draw_a), 0) AS baseline_current_a, COALESCE(AVG(vibration_g), 0) AS baseline_vibration_g FROM telemetry_raw WHERE thing_id = $1 AND time >= NOW() - INTERVAL '7 days' AND load_kg BETWEEN GREATEST($6 - 100, 0) AND ($6 + 100) AND event_type = 'TELEMETRY_UPDATE';",
+        "options": {
+          "queryReplacement": "={{ [$json.thing_id || $json.thingId || $env.PRIMARY_THING_ID || 'building:floor1:elevator', $json.power_kw || 0, $json.current_draw_a || 0, $json.vibration_g || 0, $json.system_mode || 'NORMAL', $json.load_kg || 0] }}"
+        }
+      },
+      "id": "7af411c2-12ca-4eec-a6fd-28a8ccd096e0",
+      "name": "Query Energy Baseline",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        4320,
+        1904
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "Y3xIBg0WwpRKadx2",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.should_notify }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "3b137f79-471d-4a1d-ac3f-59fc66aa3bc2",
+      "name": "Route: Notify Energy?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        4768,
+        1904
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://n8n:5678/webhook/maintenance-agent",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ thing_id: $json.thing_id, payload: { energy: $json.optimization || {} }, risk_analysis: { severity: 'WARNING', flags: ($json.optimization || {}).recommendations || [], risk_score: 45 } }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "fccbbc2f-1977-4af6-b3e9-16493ed33c89",
+      "name": "Queue Energy Maintenance Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        4992,
+        1808
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://n8n:5678/webhook/notification-agent",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ thing_id: $json.thing_id, severity: 'WARNING', title: 'Energy optimization anomaly', message: 'Detected ' + (($json.optimization || {}).recommendations || []).join(', ') + ' on ' + $json.thing_id, event: $json, risk_analysis: { severity: 'WARNING', risk_score: 45, flags: ($json.optimization || {}).recommendations || [] } }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "19e72fa4-3cf7-4cd3-b3cd-f8590c193711",
+      "name": "Queue Energy Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        4992,
+        2000
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "id": "f1925f6f-4763-497b-b803-f5fb4d348e9e",
+      "name": "Schedule: Weekly Compliance Report",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        3648,
+        2224
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT thing_id, COUNT(*) AS total_events, MAX(risk_score) AS peak_risk, ROUND(AVG(risk_score)::numeric, 1) AS avg_risk, COUNT(*) FILTER (WHERE event_type = 'SECURITY_BREACH') AS security_breaches, COUNT(*) FILTER (WHERE forced_entry OR audio_distress) AS life_safety_events, ROUND(AVG(power_kw)::numeric, 2) AS avg_power_kw, ROUND(percentile_cont(0.95) WITHIN GROUP (ORDER BY vibration_g)::numeric, 4) AS p95_vibration_g, MIN(time) AS period_start, MAX(time) AS period_end FROM telemetry_raw WHERE time >= NOW() - INTERVAL '7 days' GROUP BY thing_id ORDER BY thing_id;",
+        "options": {}
+      },
+      "id": "4fc96e8c-7a9f-4560-ab33-e83d4ec81f15",
+      "name": "Query Weekly Compliance Report",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3872,
+        2224
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "Y3xIBg0WwpRKadx2",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $env.EMAIL_FROM || 'elevator-alerts@localhost' }}",
+        "toEmail": "={{ $env.EMAIL_TO || 'operator@localhost' }}",
+        "subject": "={{ $json.subject }}",
+        "emailFormat": "both",
+        "html": "={{ $json.html }}",
+        "options": {}
+      },
+      "id": "461178b7-1df4-4264-82e9-12c5f3602f9a",
+      "name": "Send Compliance Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [
+        4320,
+        2224
+      ],
+      "webhookId": "5813b679-f489-4442-aee4-92055335e853",
+      "credentials": {
+        "smtp": {
+          "id": "3H4qFerKDxdHr41r",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "audit-agent",
+        "options": {}
+      },
+      "id": "6ca8fe58-31c9-47fe-8666-0338160aa7c9",
+      "name": "Webhook: Audit Event",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        3648,
+        2448
+      ],
+      "webhookId": "audit-agent"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO audit_log (audit_id, correlation_id, created_at, agent_name, workflow_name, node_name, event_type, thing_id, action, trigger, risk_score, status, details, error_message, duration_ms) VALUES ($1, $2, COALESCE($3::timestamptz, NOW()), $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15) ON CONFLICT (audit_id) DO NOTHING;",
+        "options": {
+          "queryReplacement": "={{ [$json.audit_id || `AUD-${Date.now()}`, $json.correlation_id || $json.details?.correlation_id || `CID-AUDIT-${Date.now()}`, $json.created_at || $json.timestamp || new Date().toISOString(), $json.agent_name || $json.agent || 'unknown_agent', $json.workflow_name || $json.workflow || $json.metadata?.workflow || 'unknown_workflow', $json.node_name || $json.node || $json.metadata?.node || 'unknown_node', $json.event_type || 'AUDIT_EVENT', $json.thing_id || $json.details?.thing_id || $env.PRIMARY_THING_ID || 'building:floor1:elevator', $json.action || $json.command || 'OBSERVE', $json.trigger || '', Number($json.risk_score || $json.details?.risk_score || 0), $json.status || ($json.error_message ? 'FAILED' : 'SUCCESS'), JSON.stringify($json.details || $json), $json.error_message || '', Number($json.duration_ms || 0)] }}"
+        }
+      },
+      "id": "d54c5600-1b2c-4e27-8560-293a9c2647fe",
+      "name": "Insert Audit Log",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3872,
+        2448
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "Y3xIBg0WwpRKadx2",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const thing = $input.first().json || {};\nreturn [{ json: { thing_id: thing.thingId || 'building:floor1:elevator', current_floor: thing.features?.cabin?.properties?.current_floor ?? 0, target_floor: thing.features?.cabin?.properties?.target_floor ?? 0, direction: thing.features?.cabin?.properties?.direction ?? 'IDLE', door_state: thing.features?.door?.properties?.state ?? 'UNKNOWN', system_mode: thing.attributes?.system_mode || 'NORMAL', risk_score: thing.attributes?.risk_score || 0, current_hour: new Date().getHours(), weekday: new Date().getDay() } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4096,
+        1584
+      ],
+      "id": "d02e3099-9e72-4e1c-bf77-5ebd0bfab46a",
+      "name": "Extract Dispatch Context"
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $input.first().json || {};\nconst demandFloor = Number(row.demand_floor ?? 0);\nconst shouldDispatch = row.system_mode === 'NORMAL' && Number(row.risk_score || 0) < 30 && row.direction === 'IDLE' && row.door_state !== 'BLOCKED' && Number(row.current_floor) !== demandFloor && Number(row.samples || 0) >= 3;\nconst thingId = row.thing_id || $env.PRIMARY_THING_ID || 'building:floor1:elevator';\nconst correlationId = `CID-OPT-DISPATCH-${thingId.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now()}`;\nconst issuedAt = new Date().toISOString();\nreturn [{ json: { thing_id: thingId, correlation_id: correlationId, agent_source: '06_optimization_audit_agents', should_dispatch: shouldDispatch, triggered_action: { agent: 'control', command: 'REPOSITION', priority: 'LOW', target_floor: demandFloor, reason: [`PREDICTIVE_DISPATCH_H${new Date().getHours()}`], source_agent: '06_optimization_audit_agents', correlation_id: correlationId, risk_score: Number(row.risk_score || 0), issued_at: issuedAt }, dispatch_analysis: { demand_floor: demandFloor, samples: Number(row.samples || 0), current_floor: Number(row.current_floor), risk_score: Number(row.risk_score || 0) } } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4544,
+        1584
+      ],
+      "id": "05fec2d7-33ee-4ad7-a52d-3759e0a74c99",
+      "name": "Decide Predictive Dispatch"
+    },
+    {
+      "parameters": {
+        "jsCode": "const thing = $input.first().json || {};\nconst cabin = thing.features?.cabin?.properties || {};\nconst motor = thing.features?.motor?.properties || {};\nreturn [{ json: { thing_id: thing.thingId || 'building:floor1:elevator', load_kg: cabin.load_kg ?? 0, direction: cabin.direction ?? 'IDLE', current_floor: cabin.current_floor ?? 0, power_kw: motor.power_kw ?? 0, current_draw_a: motor.current_draw_a ?? 0, vibration_g: motor.vibration_g ?? motor.vibration_level ?? 0, system_mode: thing.attributes?.system_mode || 'NORMAL' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4096,
+        1904
+      ],
+      "id": "7113713a-6907-40a1-b101-8b957b9560a6",
+      "name": "Extract Energy Context"
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $input.first().json || {};\nconst num = (value, fallback = 0) => {\n  const n = Number(value);\n  return Number.isFinite(n) ? n : fallback;\n};\n\nconst thingId = row.thing_id || $env.PRIMARY_THING_ID || 'building:floor1:elevator';\nconst currentFloor = num(row.current_floor);\nconst baselinePower = num(row.baseline_power_kw);\nconst baselineCurrent = num(row.baseline_current_a);\nconst baselineVibration = num(row.baseline_vibration_g);\nconst currentPower = num(row.current_power_kw ?? row.power_kw);\nconst currentCurrent = num(row.current_draw_a);\nconst currentVibration = num(row.current_vibration_g ?? row.vibration_g);\nconst loadKg = num(row.load_kg);\nconst demandFloor = Number.isFinite(Number(row.predicted_demand_floor)) ? Number(row.predicted_demand_floor) : currentFloor;\n\nconst recommendations = [];\nif (baselinePower > 0 && currentPower > baselinePower * 1.25) recommendations.push('POWER_SPIKE');\nif (baselineCurrent > 0 && currentCurrent > baselineCurrent * 1.25) recommendations.push('CURRENT_DRAW_ELEVATED');\nif (baselineVibration > 0 && currentVibration > baselineVibration * 1.5) recommendations.push('VIBRATION_ELEVATED');\nif (loadKg < 50 && baselinePower > 0 && currentPower > baselinePower * 1.2) recommendations.push('HIGH_CONSUMPTION_LOW_LOAD');\n\nlet energyMode = 'NORMAL';\nif (recommendations.includes('HIGH_CONSUMPTION_LOW_LOAD') || row.direction === 'IDLE') energyMode = 'SAVING';\nif (Number(row.samples || 0) >= 10 && loadKg > 200) energyMode = 'PEAK';\n\nconst maintenanceLinked = recommendations.some((item) => ['VIBRATION_ELEVATED', 'CURRENT_DRAW_ELEVATED'].includes(item));\nconst confidence = Math.min(1, Math.max(0.2, Number(row.samples || 0) / 20));\n\nreturn [{\n  json: {\n    ...row,\n    thing_id: thingId,\n    should_notify: recommendations.length > 0,\n    should_open_maintenance_review: maintenanceLinked,\n    optimization: {\n      recommended_parking_floor: demandFloor,\n      predicted_demand_floor: demandFloor,\n      energy_mode: energyMode,\n      confidence: Math.round(confidence * 100) / 100,\n      recommendations,\n      updated_at: new Date().toISOString()\n    },\n    risk_analysis: {\n      severity: recommendations.length > 0 ? 'WARNING' : 'OK',\n      risk_score: recommendations.length > 0 ? 45 : 0,\n      flags: recommendations\n    }\n  }\n}];\n\r\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4544,
+        1904
+      ],
+      "id": "268e8466-8a06-4125-a4b5-e0f7bcb73084",
+      "name": "Energy Optimization Engine"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = $input.all().map((item) => item.json);\nconst html = rows.map((row) => `<h3>${row.thing_id}</h3><ul><li>Total events: ${row.total_events}</li><li>Peak risk: ${row.peak_risk}</li><li>Average risk: ${row.avg_risk}</li><li>Security breaches: ${row.security_breaches}</li><li>Life safety events: ${row.life_safety_events}</li><li>Average power: ${row.avg_power_kw} kW</li><li>P95 vibration: ${row.p95_vibration_g} g</li><li>Period: ${row.period_start} to ${row.period_end}</li></ul>`).join('');\nreturn [{ json: { html, subject: 'Weekly ElevatorOS Compliance Report' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4096,
+        2224
+      ],
+      "id": "ebcd5904-0858-46ae-a24d-9a137b620c07",
+      "name": "Format Compliance Email"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule: Predictive Dispatch Every 15m": {
+      "main": [
+        [
+          {
+            "node": "GET Current Thing for Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Current Thing for Dispatch": {
+      "main": [
+        [
+          {
+            "node": "Extract Dispatch Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Demand Floor": {
+      "main": [
+        [
+          {
+            "node": "Decide Predictive Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route: Dispatch?": {
+      "main": [
+        [
+          {
+            "node": "Queue Predictive Dispatch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule: Energy Optimization Every 15m": {
+      "main": [
+        [
+          {
+            "node": "GET Current Thing for Energy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET Current Thing for Energy": {
+      "main": [
+        [
+          {
+            "node": "Extract Energy Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Energy Baseline": {
+      "main": [
+        [
+          {
+            "node": "Energy Optimization Engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route: Notify Energy?": {
+      "main": [
+        [
+          {
+            "node": "Queue Energy Maintenance Review",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Queue Energy Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule: Weekly Compliance Report": {
+      "main": [
+        [
+          {
+            "node": "Query Weekly Compliance Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Weekly Compliance Report": {
+      "main": [
+        [
+          {
+            "node": "Format Compliance Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook: Audit Event": {
+      "main": [
+        [
+          {
+            "node": "Insert Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Dispatch Context": {
+      "main": [
+        [
+          {
+            "node": "Query Demand Floor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide Predictive Dispatch": {
+      "main": [
+        [
+          {
+            "node": "Route: Dispatch?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Energy Context": {
+      "main": [
+        [
+          {
+            "node": "Query Energy Baseline",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Energy Optimization Engine": {
+      "main": [
+        [
+          {
+            "node": "Route: Notify Energy?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Compliance Email": {
+      "main": [
+        [
+          {
+            "node": "Send Compliance Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "00dd58a9-6fee-43c0-84e9-c4218f902da7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "417ede3735a1a3ac213ca021cd26620099d309138c4710d0d002e06e112f89de"
+  },
+  "id": "scY8eOqx6E4T0kHR",
+  "tags": []
+}

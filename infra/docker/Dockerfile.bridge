@@ -1,0 +1,27 @@
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+# Create minimal package.json with exact versions
+RUN printf '{"dependencies":{"mqtt":"5.15.1","axios":"1.15.2"}}' > package.json \
+    && npm install --no-fund --no-audit --production
+
+# Runtime stage
+FROM node:20-alpine
+WORKDIR /app
+
+# Create non-root user
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+
+# Copy node_modules from builder
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --chown=nodejs:nodejs services/ditto-bridge/bridge.js ./bridge.js
+
+# Security: use non-root user
+USER nodejs
+
+# No HEALTHCHECK: the bridge is a one-way MQTT->Ditto pump and exposes no
+# listening port, so a TCP probe is meaningless. Docker's restart policy
+# (configured in docker-compose.yml as `restart: on-failure:5`) already
+# recovers from real process death.
+
+CMD ["node", "bridge.js"]

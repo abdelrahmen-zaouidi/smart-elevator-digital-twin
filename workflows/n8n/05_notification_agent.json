@@ -1,0 +1,563 @@
+{
+  "name": "05_notification_agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "notification-agent",
+        "options": {}
+      },
+      "id": "d5ea752d-bc20-4471-8a8f-136db96065c8",
+      "name": "Webhook: Notification Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        2496,
+        624
+      ],
+      "webhookId": "notification-agent"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO notification_outbox (correlation_id, thing_id, severity, priority, channel, dedupe_key, payload, status, next_attempt_at, attempts, max_attempts, sent_at) VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,COALESCE($9::text,'PENDING'),NOW(),0,$8,CASE WHEN COALESCE($9::text,'PENDING') = 'SENT' THEN NOW() ELSE NULL END) ON CONFLICT (dedupe_key) DO NOTHING;",
+        "options": {
+          "queryReplacement": "={{ [$json.correlation_id, $json.thing_id, $json.severity, $json.priority || 'MEDIUM', $json.channel, $json.dedupe_key, JSON.stringify($json.payload || {}), $json.max_attempts || 5, $json.status || 'PENDING'] }}"
+        }
+      },
+      "id": "e3e1850f-f2d2-4fe7-bee9-3970c0350cfb",
+      "name": "Insert Notification Outbox Row",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2944,
+        624
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "Y3xIBg0WwpRKadx2",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "39c8f453-88ad-4d1b-a521-fe2ef6e6e588",
+      "name": "Schedule: Drain Notification Outbox",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        2496,
+        1184
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE notification_outbox o SET status = 'SENDING', locked_at = NOW(), attempts = attempts + 1 WHERE o.id IN (SELECT id FROM notification_outbox WHERE status IN ('PENDING','RETRY') AND channel <> 'dashboard' AND next_attempt_at <= NOW() AND (locked_at IS NULL OR locked_at < NOW() - INTERVAL '10 minutes') ORDER BY priority DESC, created_at LIMIT 25 FOR UPDATE SKIP LOCKED) RETURNING o.id, o.correlation_id, o.thing_id, o.severity, o.priority, o.channel, o.payload, o.attempts, o.max_attempts, o.escalation_level;",
+        "options": {}
+      },
+      "id": "363660d3-f66b-4bab-be80-8ac03bc46f51",
+      "name": "Claim Due Notifications",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        2720,
+        1184
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "Y3xIBg0WwpRKadx2",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.channel }}",
+              "value2": "telegram"
+            },
+            {
+              "value1": "={{ $json.delivery?.telegramChatId || \"\" }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "960b603e-4e5e-49cb-b680-cf7747c55a6a",
+      "name": "Route Telegram",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        3168,
+        848
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.channel }}",
+              "value2": "email"
+            },
+            {
+              "value1": "={{ $json.delivery?.emailTo || \"\" }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "4b1d5408-0827-4c53-b6ba-e0e234936cb4",
+      "name": "Route Email",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        3168,
+        1088
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.channel }}",
+              "value2": "sms"
+            },
+            {
+              "value1": "={{ $json.delivery?.smsWebhookUrl || \"\" }}",
+              "operation": "isNotEmpty"
+            },
+            {
+              "value1": "={{ $json.delivery?.alertPhone || \"\" }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "1b700467-8a57-4c18-9620-c7ed7f6c2aa1",
+      "name": "Route SMS",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        3168,
+        1280
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.channel }}",
+              "value2": "voice"
+            },
+            {
+              "value1": "={{ $json.delivery?.voiceWebhookUrl || \"\" }}",
+              "operation": "isNotEmpty"
+            },
+            {
+              "value1": "={{ $json.delivery?.alertPhone || \"\" }}",
+              "operation": "isNotEmpty"
+            }
+          ]
+        }
+      },
+      "id": "9794c745-5f68-44ba-a51b-ebbdb3deb542",
+      "name": "Route Voice",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        3168,
+        1520
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.delivery.telegramChatId }}",
+        "text": "={{ $json.formatted.telegram }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "11059b2e-2ffb-4383-8007-46051b0462ed",
+      "name": "Send Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        3392,
+        848
+      ],
+      "webhookId": "2418a7a2-549d-456b-b015-a5c91028021c",
+      "credentials": {
+        "telegramApi": {
+          "id": "5UHc3Bgmrjk7Jwgm",
+          "name": "Telegram account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ $json.delivery.emailFrom }}",
+        "toEmail": "={{ $json.delivery.emailTo }}",
+        "subject": "={{ $json.formatted.emailSubject }}",
+        "emailFormat": "both",
+        "text": "={{ $json.formatted.sms }}",
+        "html": "={{ $json.formatted.emailHtml }}",
+        "options": {}
+      },
+      "id": "8974bd94-98b0-4192-8846-3b7ef1ff887f",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [
+        3392,
+        1088
+      ],
+      "webhookId": "d3fdf424-9564-44d5-ac73-1254a3c7fc6c",
+      "credentials": {
+        "smtp": {
+          "id": "3H4qFerKDxdHr41r",
+          "name": "SMTP account"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.delivery.smsWebhookUrl }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $json.delivery.alertPhone, message: $json.formatted.sms }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "399a9789-d1fd-4431-bf91-278af93ac190",
+      "name": "Send SMS",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        3392,
+        1280
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.delivery.voiceWebhookUrl }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ to: $json.delivery.alertPhone, title: $json.payload.title, message: $json.formatted.voice || $json.formatted.sms }) }}",
+        "options": {
+          "timeout": 5000
+        }
+      },
+      "id": "8d58f4e8-759d-4bdd-9402-38af9f8217fc",
+      "name": "Send Voice Escalation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        3392,
+        1520
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE notification_outbox SET status = 'SENT', sent_at = NOW(), locked_at = NULL, last_error = NULL WHERE id = $1;",
+        "options": {
+          "queryReplacement": "={{ [$json.id] }}"
+        }
+      },
+      "id": "c36bc0f8-dc54-4feb-82b2-653bfedb43e8",
+      "name": "Mark Notification Sent",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3616,
+        1088
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "Y3xIBg0WwpRKadx2",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "UPDATE notification_outbox SET status = CASE WHEN attempts >= max_attempts THEN 'FAILED' ELSE 'RETRY' END, locked_at = NULL, last_error = $2, next_attempt_at = NOW() + make_interval(secs => LEAST(3600, (POWER(2, attempts)::int * 60))), escalation_level = CASE WHEN attempts >= max_attempts THEN escalation_level + 1 ELSE escalation_level END WHERE id = $1;",
+        "options": {
+          "queryReplacement": "={{ [$json.id, String((($json.error && ($json.error.message || $json.error.description)) || 'delivery_failure')).slice(0, 500)] }}"
+        }
+      },
+      "id": "f8cf1ae3-7e19-433e-8637-ef8215fc2f88",
+      "name": "Mark Notification Failed",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        3616,
+        1280
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "Y3xIBg0WwpRKadx2",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const row = $input.first().json || {};\nconst env = (typeof process !== 'undefined' && process.env)\n  ? process.env\n  : (typeof $env !== 'undefined' ? $env : {});\n\nconst envValue = (key, fallback = '') => {\n  const value = env[key];\n  if (value === undefined || value === null || value === '') return fallback;\n  return String(value);\n};\n\nconst payload = typeof row.payload === 'string' ? JSON.parse(row.payload) : (row.payload || {});\nconst detailed = payload.detailed || {};\nconst flags = detailed.flags || [];\nconst riskScore = detailed.risk_score || 0;\nconst correlationId = row.correlation_id || detailed.correlation_id || '';\nconst title = payload.title || `${row.severity} elevator alert`;\nconst compact = payload.compact || `Elevator ${row.thing_id}`;\nconst dashboardUrl = payload.dashboard_url || envValue('DASHBOARD_URL');\n\nconst text = [\n  `${title}`,\n  `Elevator: ${row.thing_id}`,\n  `Severity: ${row.severity}`,\n  `Risk: ${riskScore}`,\n  `Correlation: ${correlationId}`,\n  compact,\n  flags.length ? `Flags: ${flags.join(', ')}` : null,\n  dashboardUrl ? `Dashboard: ${dashboardUrl}` : null\n].filter(Boolean).join('\\n');\n\nconst html = `\n<h2>${title}</h2>\n<p><strong>Elevator:</strong> ${row.thing_id}</p>\n<p><strong>Severity:</strong> ${row.severity}</p>\n<p><strong>Risk:</strong> ${riskScore}</p>\n<p><strong>Correlation:</strong> ${correlationId}</p>\n<p>${compact}</p>\n<p><strong>Flags:</strong> ${flags.join(', ') || 'None'}</p>\n${dashboardUrl ? `<p><a href=\"${dashboardUrl}\">Open dashboard incident</a></p>` : ''}\n`;\n\nreturn [{\n  json: {\n    ...row,\n    payload,\n    delivery: {\n      telegramChatId: envValue('TELEGRAM_CHAT_ID'),\n      emailFrom: envValue('EMAIL_FROM', 'elevator-alerts@localhost'),\n      emailTo: envValue('EMAIL_TO'),\n      smsWebhookUrl: envValue('SMS_WEBHOOK_URL'),\n      voiceWebhookUrl: envValue('VOICE_WEBHOOK_URL'),\n      alertPhone: envValue('ALERT_PHONE')\n    },\n    formatted: {\n      telegram: text.replace(/([_*[\\]()~`>#+\\-=|{}.!])/g, '\\\\$1'),\n      emailSubject: `[${row.severity}] ${row.thing_id} ${correlationId}`,\n      emailHtml: html,\n      sms: `[${row.severity}] ${row.thing_id} risk ${riskScore}. ${compact}`.slice(0, 280),\n      voice: `${row.severity} elevator incident for ${row.thing_id}. Correlation ${correlationId}. ${compact}`\n    }\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2944,
+        1184
+      ],
+      "id": "915f8de7-d990-4a5c-aefd-9b21761c8e30",
+      "name": "Format Delivery Payload"
+    },
+    {
+      "parameters": {
+        "jsCode": "const rawInput = $input.first().json || {};\nconst input = rawInput.body && typeof rawInput.body === 'object' ? rawInput.body : rawInput;\nconst env = (typeof process !== 'undefined' && process.env)\n  ? process.env\n  : (typeof $env !== 'undefined' ? $env : {});\n\nconst envValue = (key, fallback = '') => {\n  const value = env[key];\n  if (value === undefined || value === null || value === '') return fallback;\n  return String(value);\n};\n\nconst envFlag = (key) => envValue(key, 'false').toLowerCase() === 'true';\nconst hasValue = (key) => envValue(key).trim().length > 0;\nconst uniqueChannels = (value) => {\n  const channels = Array.isArray(value) ? value : [value];\n  return [...new Set(channels\n    .filter((channel) => typeof channel === 'string' && channel.trim())\n    .map((channel) => channel.trim().toLowerCase()))];\n};\n\nconst severity = input.severity || input.risk_analysis?.severity || input.event?.risk_analysis?.severity || 'INFO';\nconst thingId = input.thing_id || input.event?.thing_id || input.work_order?.thing_id || envValue('PRIMARY_THING_ID', 'building:floor1:elevator');\nconst correlationId = input.correlation_id || input.event?.correlation_id || input.work_order?.correlation_id || `CID-NOTIFY-${Date.now()}`;\nconst eventType = input.event_type || input.event?.event_type || (input.work_order ? 'MAINTENANCE_REQUIRED' : 'NOTIFICATION_REQUEST');\nconst dedupeMinutes = Number(envValue('NOTIFICATION_DEDUPE_MINUTES', '5'));\nconst bucket = Math.floor(Date.now() / (dedupeMinutes * 60 * 1000));\nconst dashboardUrl = envValue('DASHBOARD_URL', 'http://localhost:3000');\n\nconst enabled = {\n  telegram: envFlag('TELEGRAM_ENABLED') && hasValue('TELEGRAM_CHAT_ID'),\n  email: envFlag('EMAIL_ENABLED') && hasValue('EMAIL_TO'),\n  sms: envFlag('SMS_ENABLED') && hasValue('SMS_WEBHOOK_URL') && hasValue('ALERT_PHONE'),\n  voice: envFlag('VOICE_ENABLED') && hasValue('VOICE_WEBHOOK_URL') && hasValue('ALERT_PHONE')\n};\n\nconst severityChannels = {\n  OK: ['dashboard'],\n  INFO: ['dashboard'],\n  WARNING: ['dashboard', 'telegram', 'email'],\n  CRITICAL: ['dashboard', 'telegram', 'email', 'sms'],\n  LOCKDOWN: ['dashboard', 'telegram', 'email', 'sms', 'voice']\n};\n\nconst normalizedSeverity = severity === 'LOCKDOWN' ? 'LOCKDOWN' : severity;\nconst requestedChannels = uniqueChannels(input.channels || severityChannels[normalizedSeverity] || ['dashboard']);\nconst skippedChannels = requestedChannels\n  .filter((channel) => channel !== 'dashboard' && !enabled[channel])\n  .map((channel) => ({\n    channel,\n    reason: 'disabled_or_missing_channel_configuration'\n  }));\n\nlet channels = requestedChannels;\nchannels = channels.filter((channel) => channel === 'dashboard' || enabled[channel]);\n\nif (channels.length === 0) {\n  channels = ['dashboard'];\n}\n\nconst riskScore = input.risk_analysis?.risk_score || input.event?.risk_analysis?.risk_score || input.event?.risk_score || 0;\nconst flags = input.risk_analysis?.flags || input.event?.risk_analysis?.flags || [];\nconst title = input.title || `${normalizedSeverity} elevator alert`;\nconst compact = input.message || (input.work_order\n  ? `Work order ${input.work_order.work_order_id} priority ${input.work_order.priority}`\n  : `Risk ${riskScore}; flags ${flags.join(', ') || 'none'}`);\n\nconst priority = normalizedSeverity === 'CRITICAL' || normalizedSeverity === 'LOCKDOWN'\n  ? 'CRITICAL'\n  : normalizedSeverity === 'WARNING'\n    ? 'HIGH'\n    : 'LOW';\n\nreturn channels.map((channel) => {\n  // Dashboard rows are already visible once persisted; external channels are\n  // queued for the scheduled delivery drain.\n  const status = channel === 'dashboard' ? 'SENT' : 'PENDING';\n\n  return {\n    json: {\n      correlation_id: correlationId,\n      thing_id: thingId,\n      severity: normalizedSeverity,\n      priority,\n      channel,\n      status,\n      dedupe_key: `${thingId}:${eventType}:${normalizedSeverity}:${channel}:${bucket}`,\n      payload: {\n        title,\n        compact,\n        detailed: {\n          thing_id: thingId,\n          severity: normalizedSeverity,\n          risk_score: riskScore,\n          flags,\n          event_type: eventType,\n          correlation_id: correlationId,\n          notification_channels: {\n            requested: requestedChannels,\n            selected: channels,\n            skipped: skippedChannels\n          },\n          event: input.event || input,\n          work_order: input.work_order || null\n        },\n        dashboard_url: `${dashboardUrl.replace(/\\/$/, '')}?thing_id=${encodeURIComponent(thingId)}&correlation_id=${encodeURIComponent(correlationId)}`\n      },\n      max_attempts: normalizedSeverity === 'CRITICAL' || normalizedSeverity === 'LOCKDOWN' ? 8 : 5\n    }\n  };\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2720,
+        624
+      ],
+      "id": "7dc47c13-4ace-43a8-be1b-6cd6ae3f2795",
+      "name": "Build Notification Outbox Rows"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook: Notification Request": {
+      "main": [
+        [
+          {
+            "node": "Build Notification Outbox Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule: Drain Notification Outbox": {
+      "main": [
+        [
+          {
+            "node": "Claim Due Notifications",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim Due Notifications": {
+      "main": [
+        [
+          {
+            "node": "Format Delivery Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Telegram": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Email": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route SMS": {
+      "main": [
+        [
+          {
+            "node": "Send SMS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Voice": {
+      "main": [
+        [
+          {
+            "node": "Send Voice Escalation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Telegram": {
+      "main": [
+        [
+          {
+            "node": "Mark Notification Sent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Notification Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email": {
+      "main": [
+        [
+          {
+            "node": "Mark Notification Sent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Notification Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send SMS": {
+      "main": [
+        [
+          {
+            "node": "Mark Notification Sent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Notification Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Voice Escalation": {
+      "main": [
+        [
+          {
+            "node": "Mark Notification Sent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Notification Failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Delivery Payload": {
+      "main": [
+        [
+          {
+            "node": "Route Telegram",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route Email",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route SMS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Route Voice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Notification Outbox Rows": {
+      "main": [
+        [
+          {
+            "node": "Insert Notification Outbox Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "9e57b519-1a40-42c1-a06e-d215fe945f1b",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "417ede3735a1a3ac213ca021cd26620099d309138c4710d0d002e06e112f89de"
+  },
+  "id": "51HelS8BzpPFccp6",
+  "tags": []
+}

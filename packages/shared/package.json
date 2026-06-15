@@ -1,0 +1,7 @@
+{
+  "name": "@smart-elevator/shared",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Shared elevator domain logic: dual-brain dispatch policy engine + deterministic command safety gate. Consumed by the dashboard (Next API + client), the dispatch engine service, and validation scripts via explicit subpath imports (e.g. @smart-elevator/shared/dispatch/index.js)."
+}

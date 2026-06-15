@@ -1,0 +1,12 @@
+# Server cert SAN: OLD (broken) vs NEW (fixed)  (2026-06-13 17:13:16 +0100)
+## OLD leaf (backup) verified against 192.168.10.10  -> MUST FAIL
+CN=smart-elevator-mqtt, O=SmartElevatorTwin
+error 64 at 0 depth lookup: IP address mismatch
+error mosquitto_config/certs/server.crt.bak-20260613-165753: verification failed
+
+## NEW leaf on disk -- SAN + validity
+subject=CN=smart-elevator-mqtt, O=SmartElevatorTwin
+notBefore=Jun 13 15:57:53 2026 GMT
+notAfter=Sep 15 15:57:53 2028 GMT
+X509v3 Subject Alternative Name: 
+    IP Address:192.168.10.10, IP Address:127.0.0.1, DNS:mosquitto, DNS:localhost, IP Address:192.168.100.7, IP Address:192.168.100.87, IP Address:10.0.16.55

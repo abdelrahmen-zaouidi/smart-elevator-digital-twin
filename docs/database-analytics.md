@@ -180,7 +180,7 @@ Invoke-RestMethod "http://localhost:3000/api/history/risk?limit=24" | Select-Obj
 
 ## Dashboard Environment Variables
 
-Add to `dashboard/.env.local` for local development (dashboard runs on the host, not in Docker):
+Add to `apps/dashboard/.env.local` for local development (dashboard runs on the host, not in Docker):
 
 ```env
 POSTGRES_HOST=127.0.0.1
@@ -229,12 +229,12 @@ docker exec elevator_db psql -U admin -d smart_building \
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| API returns 503 | DB not reachable from dashboard host | Check `POSTGRES_HOST=127.0.0.1` in `dashboard/.env.local`; confirm port 5432 is mapped |
+| API returns 503 | DB not reachable from dashboard host | Check `POSTGRES_HOST=127.0.0.1` in `apps/dashboard/.env.local`; confirm port 5432 is mapped |
 | `hourly_risk` / `hourly_energy` return empty | No telemetry yet | Activate workflow 01, wait 5 minutes for data |
 | `time_bucket` function not found | TimescaleDB extension not loaded | Run `CREATE EXTENSION IF NOT EXISTS timescaledb;` in the DB |
 | `maintenance_work_orders` empty | Workflow 04 not active or threshold not reached | Activate workflow 04; it creates work orders when wear index exceeds threshold |
 | Dashboard shows "DB unavailable" in Settings | Wrong POSTGRES_HOST or DB stopped | Run `docker compose ps postgres`; check env var |
-| Build error: `pg` not found | Package not installed | Run `npm install pg` inside `dashboard/` |
+| Build error: `pg` not found | Package not installed | Run `npm install pg` inside `apps/dashboard/` |
 
 ---
 

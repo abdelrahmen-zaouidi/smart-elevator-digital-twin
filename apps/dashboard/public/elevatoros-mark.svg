@@ -1,0 +1,10 @@
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ElevatorOS mark">
+  <rect width="64" height="64" rx="14" fill="#07141A"/>
+  <path d="M24 43H17V21H24" stroke="#64727A" stroke-width="4" stroke-linecap="square" stroke-linejoin="round"/>
+  <path d="M40 21H47V43H40" stroke="#64727A" stroke-width="4" stroke-linecap="square" stroke-linejoin="round"/>
+  <path d="M28 27L32 25.5V40L28 41.5V27Z" fill="#12C6D8"/>
+  <path d="M35 25L39 23.5V38L35 39.5V25Z" fill="#18D5E5"/>
+  <path d="M42 23L46 21.5V36L42 37.5V23Z" fill="#5FEAF2"/>
+  <circle cx="32" cy="47" r="3" fill="#EF4D43"/>
+  <path d="M20 50H44" stroke="#172833" stroke-width="2" stroke-linecap="round"/>
+</svg>

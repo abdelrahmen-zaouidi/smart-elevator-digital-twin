@@ -1,0 +1,707 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
+     viewBox="0 0 2380 1684" font-family="Arial, Helvetica, sans-serif" fill="none">
+  <!-- ============================================================
+       GENERAL ELECTRICAL SCHEMATIC - ESP32-S3 SMART ELEVATOR PROTOTYPE
+       Rev C - A4 landscape - single sheet - thesis documentation
+       Not for manufacturing
+       ============================================================ -->
+  <defs>
+    <g id="gnd" stroke="#000" stroke-width="1.6">
+      <line x1="0" y1="0" x2="0" y2="12"/>
+      <line x1="-10" y1="12" x2="10" y2="12"/>
+      <line x1="-6" y1="17" x2="6" y2="17"/>
+      <line x1="-2.5" y1="22" x2="2.5" y2="22"/>
+    </g>
+    <g id="flag12">
+      <line x1="0" y1="0" x2="0" y2="-12" stroke="#A07D00" stroke-width="2.8"/>
+      <line x1="-10" y1="-12" x2="10" y2="-12" stroke="#A07D00" stroke-width="2.8"/>
+      <text x="0" y="-18" font-size="11" font-weight="bold" fill="#A07D00" text-anchor="middle">+12V</text>
+    </g>
+    <g id="flag5">
+      <line x1="0" y1="0" x2="0" y2="-12" stroke="#B00000" stroke-width="2.8"/>
+      <line x1="-10" y1="-12" x2="10" y2="-12" stroke="#B00000" stroke-width="2.8"/>
+      <text x="0" y="-18" font-size="11" font-weight="bold" fill="#B00000" text-anchor="middle">+5V</text>
+    </g>
+    <g id="flag3v3esp">
+      <line x1="0" y1="0" x2="0" y2="-12" stroke="#7A1F1F" stroke-width="2.4"/>
+      <line x1="-10" y1="-12" x2="10" y2="-12" stroke="#7A1F1F" stroke-width="2.4"/>
+      <text x="0" y="-18" font-size="10" font-weight="bold" fill="#7A1F1F" text-anchor="middle">ESP32_3V3</text>
+    </g>
+    <g id="warn">
+      <path d="M 0 -10 L 9 7 L -9 7 Z" fill="#FFF3D6" stroke="#B45309" stroke-width="1.6"/>
+      <text x="0" y="4.5" font-size="10" font-weight="bold" fill="#B45309" text-anchor="middle">!</text>
+    </g>
+  </defs>
+
+  <!-- page -->
+  <rect x="0" y="0" width="2380" height="1684" fill="#FFFFFF"/>
+  <rect x="24" y="24" width="2332" height="1636" stroke="#000" stroke-width="2"/>
+  <text x="1190" y="58" font-size="19" font-weight="bold" fill="#000" text-anchor="middle">GENERAL ELECTRICAL SCHEMATIC &#8212; REDUCED-SCALE ESP32-S3 SMART ELEVATOR PROTOTYPE (4 FLOORS)</text>
+
+  <!-- ====================== LEGEND (top right) ====================== -->
+  <g>
+    <rect x="1700" y="80" width="650" height="310" stroke="#555" stroke-width="1.2"/>
+    <text x="1716" y="104" font-size="14" font-weight="bold" fill="#000">LEGEND</text>
+    <line x1="1716" y1="126" x2="1786" y2="126" stroke="#333" stroke-width="1.4"/>
+    <text x="1800" y="130" font-size="11" fill="#000">signal wire (3.3 V logic)</text>
+    <line x1="1716" y1="150" x2="1786" y2="150" stroke="#A07D00" stroke-width="3.5"/>
+    <text x="1800" y="154" font-size="11" fill="#000">power rail (colour = ATX wire colour, thick line)</text>
+    <line x1="1716" y1="174" x2="1786" y2="174" stroke="#777" stroke-width="1.4" stroke-dasharray="6 5"/>
+    <text x="1800" y="178" font-size="11" fill="#000">magnetic coupling &#8212; non-electrical</text>
+    <rect x="1716" y="188" width="70" height="14" stroke="#666" stroke-width="1.4" stroke-dasharray="8 3 2 3"/>
+    <text x="1800" y="200" font-size="11" fill="#000">software / network boundary &#8212; no physical wiring</text>
+    <circle cx="1751" cy="222" r="4" fill="#000"/>
+    <line x1="1726" y1="222" x2="1776" y2="222" stroke="#333" stroke-width="1.4"/>
+    <line x1="1751" y1="212" x2="1751" y2="232" stroke="#333" stroke-width="1.4"/>
+    <text x="1800" y="226" font-size="11" fill="#000">junction dot = connected; crossing without dot = not connected</text>
+    <use xlink:href="#warn" x="1751" y="248"/>
+    <text x="1800" y="252" font-size="11" fill="#000">C1&#8211;C6 &#8594; GPIO CAUTION NOTES box &#183; G1&#8211;G6 &#8594; GENERAL NOTES box</text>
+    <use xlink:href="#flag12" x="1740" y="292"/>
+    <use xlink:href="#flag5" x="1800" y="292"/>
+    <use xlink:href="#flag3v3esp" x="1880" y="292"/>
+    <text x="1930" y="288" font-size="11" fill="#000">power flags (net labels): +12 V / +5 V from ATX;</text>
+    <text x="1930" y="302" font-size="11" fill="#000">ESP32_3V3 = on-board LDO output (NOT ATX +3.3 V)</text>
+    <use xlink:href="#gnd" x="1740" y="318"/>
+    <text x="1800" y="330" font-size="11" fill="#000">COMMON_GND &#8212; all ground symbols are one node (ATX black)</text>
+    <text x="1716" y="362" font-size="10.5" fill="#555" font-style="italic">Laboratory prototype wiring architecture &#8212; not a certified industrial elevator</text>
+    <text x="1716" y="377" font-size="10.5" fill="#555" font-style="italic">controller. Scale: none. Sheet 1/1, A4 landscape.</text>
+  </g>
+
+  <!-- ====================== ATX POWER SUPPLY ====================== -->
+  <g>
+    <rect x="50" y="80" width="430" height="320" stroke="#000" stroke-width="2.2"/>
+    <text x="66" y="108" font-size="16" font-weight="bold" fill="#000">PS1 &#8212; ATX POWER SUPPLY</text>
+    <!-- standby group -->
+    <rect x="66" y="124" width="398" height="52" stroke="#7B2D8E" stroke-width="1" stroke-dasharray="4 3"/>
+    <text x="76" y="140" font-size="10.5" font-weight="bold" fill="#7B2D8E">STANDBY &#8212; ALWAYS LIVE while mains connected</text>
+    <text x="456" y="158" font-size="12.5" font-weight="bold" fill="#7B2D8E" text-anchor="end">+5VSB (purple)</text>
+    <!-- main rails group -->
+    <rect x="66" y="186" width="398" height="122" stroke="#555" stroke-width="1" stroke-dasharray="4 3"/>
+    <text x="76" y="202" font-size="10.5" font-weight="bold" fill="#555">MAIN RAILS &#8212; LIVE ONLY WHILE PS-ON IS HELD LOW</text>
+    <text x="456" y="218" font-size="12.5" font-weight="bold" fill="#A07D00" text-anchor="end">+12 V (yellow)</text>
+    <text x="456" y="258" font-size="12.5" font-weight="bold" fill="#B00000" text-anchor="end">+5 V (red)</text>
+    <text x="456" y="298" font-size="12.5" font-weight="bold" fill="#D96D00" text-anchor="end">+3.3 V (orange)</text>
+    <!-- control -->
+    <text x="456" y="338" font-size="12.5" font-weight="bold" fill="#000" text-anchor="end">GND (black)</text>
+    <text x="456" y="378" font-size="12.5" font-weight="bold" fill="#1A7A1A" text-anchor="end">PS-ON (green)</text>
+    <text x="66" y="338" font-size="10.5" fill="#000">common return</text>
+    <text x="66" y="378" font-size="10.5" fill="#1A7A1A">active-LOW enable</text>
+  </g>
+
+  <!-- rails -->
+  <!-- +5VSB to ESP32 VIN -->
+  <polyline points="480,150 1080,150 1080,440" stroke="#7B2D8E" stroke-width="3.5"/>
+  <text x="540" y="142" font-size="11.5" font-weight="bold" fill="#7B2D8E">+5VSB &#8212; standby rail, ALWAYS LIVE &#8594; ESP32 5V/VIN (see STANDBY POWER BEHAVIOUR box)</text>
+  <!-- +12V arrow -->
+  <line x1="480" y1="210" x2="745" y2="210" stroke="#A07D00" stroke-width="3.5"/>
+  <path d="M 760 210 L 744 203 L 744 217 Z" fill="#A07D00"/>
+  <text x="540" y="202" font-size="11.5" font-weight="bold" fill="#A07D00">+12 V &#8212; actuator power &#8594; +12V flags</text>
+  <!-- +5V arrow -->
+  <line x1="480" y1="250" x2="745" y2="250" stroke="#B00000" stroke-width="3.5"/>
+  <path d="M 760 250 L 744 243 L 744 257 Z" fill="#B00000"/>
+  <text x="540" y="242" font-size="11.5" font-weight="bold" fill="#B00000">+5 V &#8212; module power &#8594; +5V flags</text>
+  <!-- +3.3V bus to KY-024 -->
+  <polyline points="480,290 770,290 770,565 520,565 520,978" stroke="#D96D00" stroke-width="3.5"/>
+  <text x="540" y="282" font-size="11.5" font-weight="bold" fill="#D96D00">+3.3 V (ATX orange) &#8594; KY-024 VCC bus only (G2)</text>
+  <!-- GND rail -->
+  <polyline points="480,330 1190,330 1190,440" stroke="#000" stroke-width="3.5"/>
+  <text x="800" y="322" font-size="11.5" font-weight="bold" fill="#000">GND (black) &#8212; COMMON_GND (G3)</text>
+  <!-- PS-ON + KCD1 -->
+  <line x1="480" y1="370" x2="490" y2="370" stroke="#1A7A1A" stroke-width="2.4"/>
+  <g>
+    <rect x="490" y="340" width="200" height="70" stroke="#000" stroke-width="1.8"/>
+    <text x="590" y="358" font-size="12" font-weight="bold" fill="#000" text-anchor="middle">SW1 &#8212; KCD1</text>
+    <text x="590" y="372" font-size="10" fill="#555" text-anchor="middle">rocker power switch</text>
+    <line x1="490" y1="370" x2="540" y2="392" stroke="#1A7A1A" stroke-width="2"/>
+    <circle cx="540" cy="392" r="3" fill="#000"/>
+    <circle cx="590" cy="392" r="3" fill="#000"/>
+    <line x1="540" y1="392" x2="586" y2="380" stroke="#000" stroke-width="1.8"/>
+    <line x1="590" y1="392" x2="690" y2="392" stroke="#1A7A1A" stroke-width="2"/>
+  </g>
+  <polyline points="690,392 740,392 740,330" stroke="#1A7A1A" stroke-width="2.4"/>
+  <circle cx="740" cy="330" r="4" fill="#000"/>
+  <text x="490" y="432" font-size="10.5" fill="#1A7A1A">SW1 closes PS-ON (active-LOW) to</text>
+  <text x="490" y="448" font-size="10.5" fill="#1A7A1A">GND &#8594; ATX main rails ON</text>
+
+  <!-- standby warning box -->
+  <g>
+    <rect x="50" y="430" width="430" height="150" stroke="#B45309" stroke-width="2"/>
+    <use xlink:href="#warn" x="72" y="452"/>
+    <text x="88" y="456" font-size="12.5" font-weight="bold" fill="#B45309">STANDBY POWER BEHAVIOUR (design check)</text>
+    <text x="62" y="478" font-size="10.5" fill="#000">When ATX main rails are OFF, the ESP32-S3 stays powered from</text>
+    <text x="62" y="494" font-size="10.5" fill="#000">+5VSB while KY-024 (+3.3 V) and actuator rails are unpowered.</text>
+    <text x="62" y="510" font-size="10.5" fill="#000">Unpowered sensors leave GPIO inputs floating and may be</text>
+    <text x="62" y="526" font-size="10.5" fill="#000">back-powered through their outputs. Firmware should treat</text>
+    <text x="62" y="542" font-size="10.5" fill="#000">sensors as unavailable while main rails are off; protect inputs /</text>
+    <text x="62" y="558" font-size="10.5" fill="#000">ensure safe pull states (series resistors &#8212; design check, not fitted).</text>
+  </g>
+
+  <!-- ====================== ESP32-S3 (centre) ====================== -->
+  <g>
+    <rect x="960" y="440" width="450" height="1030" stroke="#1F4E79" stroke-width="2.6"/>
+    <!-- top pins -->
+    <line x1="1080" y1="440" x2="1080" y2="450" stroke="#1F4E79" stroke-width="1.6"/>
+    <line x1="1190" y1="440" x2="1190" y2="450" stroke="#1F4E79" stroke-width="1.6"/>
+    <line x1="1300" y1="440" x2="1300" y2="450" stroke="#1F4E79" stroke-width="1.6"/>
+    <text x="1080" y="468" font-size="12" font-weight="bold" fill="#1F4E79" text-anchor="middle">5V/VIN</text>
+    <text x="1190" y="468" font-size="12" font-weight="bold" fill="#1F4E79" text-anchor="middle">GND</text>
+    <text x="1300" y="468" font-size="12" font-weight="bold" fill="#1F4E79" text-anchor="middle">3V3</text>
+    <use xlink:href="#flag3v3esp" x="1300" y="438"/>
+    <text x="1330" y="425" font-size="10" fill="#7A1F1F">3V3 = LDO OUTPUT &#8594; RC522, RV1&#8211;RV3 (G2)</text>
+    <!-- identity -->
+    <text x="1185" y="585" font-size="16" font-weight="bold" fill="#1F4E79" text-anchor="middle">U1 &#8212; ESP32-S3-DevKitC-1</text>
+    <text x="1185" y="608" font-size="11" fill="#000" text-anchor="middle">central controller &#8212; 3.3 V logic, NOT 5 V tolerant (G1)</text>
+    <!-- mid notes -->
+    <text x="1185" y="940" font-size="10.5" fill="#555" text-anchor="middle">on-module Wi-Fi 2.4 GHz radio &#8212; wireless, no cable</text>
+    <text x="1185" y="965" font-size="10.5" fill="#555" text-anchor="middle">strap pins used: GPIO0, GPIO3, GPIO45, GPIO46</text>
+    <text x="1185" y="990" font-size="10.5" fill="#555" text-anchor="middle">native USB pins used: GPIO19, GPIO20 &#8212; see GPIO CAUTION NOTES (C1&#8211;C6)</text>
+    <text x="1185" y="1455" font-size="10" fill="#555" text-anchor="middle">bottom pins = GPIO numbers (labels on wires)</text>
+
+    <!-- left pins -->
+    <g stroke="#1F4E79" stroke-width="1.6">
+      <line x1="950" y1="640" x2="960" y2="640"/><line x1="950" y1="680" x2="960" y2="680"/>
+      <line x1="950" y1="720" x2="960" y2="720"/><line x1="950" y1="760" x2="960" y2="760"/>
+      <line x1="950" y1="1145" x2="960" y2="1145"/><line x1="950" y1="1185" x2="960" y2="1185"/>
+      <line x1="950" y1="1285" x2="960" y2="1285"/><line x1="950" y1="1325" x2="960" y2="1325"/>
+      <line x1="950" y1="1365" x2="960" y2="1365"/>
+    </g>
+    <g font-size="13" font-weight="bold" fill="#1F4E79">
+      <text x="968" y="645">GPIO8</text><text x="968" y="685">GPIO3</text>
+      <text x="968" y="725">GPIO46</text><text x="968" y="765">GPIO0</text>
+      <text x="968" y="1150">GPIO7</text><text x="968" y="1190">GPIO15</text>
+      <text x="968" y="1290">GPIO4</text><text x="968" y="1330">GPIO5</text><text x="968" y="1370">GPIO6</text>
+    </g>
+    <g font-size="10" fill="#555">
+      <text x="1030" y="645">KY-024 F0</text><text x="1030" y="685">KY-024 F1 (C2)</text>
+      <text x="1036" y="725">KY-024 F2 (C3)</text><text x="1030" y="765">KY-024 F3 (C1)</text>
+      <text x="1030" y="1150">door open limit</text><text x="1036" y="1190">door closed limit</text>
+      <text x="1030" y="1290">ADC1_CH3 &#8212; temp proxy</text><text x="1030" y="1330">ADC1_CH4 &#8212; vib proxy</text><text x="1030" y="1370">ADC1_CH5 &#8212; load proxy</text>
+    </g>
+
+    <!-- right pins -->
+    <g stroke="#1F4E79" stroke-width="1.6">
+      <line x1="1410" y1="500" x2="1420" y2="500"/><line x1="1410" y1="540" x2="1420" y2="540"/>
+      <line x1="1410" y1="620" x2="1420" y2="620"/><line x1="1410" y1="660" x2="1420" y2="660"/>
+      <line x1="1410" y1="700" x2="1420" y2="700"/>
+      <line x1="1410" y1="860" x2="1420" y2="860"/>
+      <line x1="1410" y1="1080" x2="1420" y2="1080"/>
+      <line x1="1410" y1="1160" x2="1420" y2="1160"/><line x1="1410" y1="1200" x2="1420" y2="1200"/>
+      <line x1="1410" y1="1330" x2="1420" y2="1330"/><line x1="1410" y1="1362" x2="1420" y2="1362"/>
+      <line x1="1410" y1="1394" x2="1420" y2="1394"/><line x1="1410" y1="1426" x2="1420" y2="1426"/>
+      <line x1="1410" y1="1458" x2="1420" y2="1458"/>
+    </g>
+    <g font-size="13" font-weight="bold" fill="#1F4E79" text-anchor="end">
+      <text x="1402" y="505">GPIO39</text><text x="1402" y="545">GPIO40</text>
+      <text x="1402" y="625">GPIO38</text><text x="1402" y="665">GPIO37</text><text x="1402" y="705">GPIO36</text>
+      <text x="1402" y="865">GPIO16</text>
+      <text x="1402" y="1085">GPIO19</text>
+      <text x="1402" y="1165">GPIO17</text><text x="1402" y="1205">GPIO18</text>
+      <text x="1402" y="1335">GPIO45</text><text x="1402" y="1367">GPIO20</text>
+      <text x="1402" y="1399">GPIO48</text><text x="1402" y="1431">GPIO21</text><text x="1402" y="1463">GPIO47</text>
+    </g>
+    <g font-size="10" fill="#555" text-anchor="end">
+      <text x="1330" y="505">STEP/PUL</text><text x="1330" y="545">DIR</text>
+      <text x="1330" y="625">door IN1</text><text x="1330" y="665">door IN2</text><text x="1330" y="705">door EN/PWM</text>
+      <text x="1330" y="865">fan relay</text>
+      <text x="1330" y="1085">buzzer (C5)</text>
+      <text x="1330" y="1165">I2C SDA</text><text x="1330" y="1205">I2C SCL</text>
+      <text x="1330" y="1335">RFID SS (C4)</text><text x="1330" y="1367">RFID RST (C5)</text>
+      <text x="1330" y="1399">RFID SCK</text><text x="1330" y="1431">RFID MISO</text><text x="1330" y="1463">RFID MOSI</text>
+    </g>
+
+    <!-- bottom pins -->
+    <g stroke="#1F4E79" stroke-width="1.6">
+      <line x1="990" y1="1470" x2="990" y2="1480"/>
+      <line x1="1060" y1="1470" x2="1060" y2="1480"/><line x1="1095" y1="1470" x2="1095" y2="1480"/>
+      <line x1="1130" y1="1470" x2="1130" y2="1480"/><line x1="1165" y1="1470" x2="1165" y2="1480"/>
+      <line x1="1215" y1="1470" x2="1215" y2="1480"/><line x1="1252" y1="1470" x2="1252" y2="1480"/>
+      <line x1="1289" y1="1470" x2="1289" y2="1480"/><line x1="1326" y1="1470" x2="1326" y2="1480"/>
+      <line x1="1363" y1="1470" x2="1363" y2="1480"/><line x1="1400" y1="1470" x2="1400" y2="1480"/>
+    </g>
+  </g>
+
+  <!-- bottom wires + number labels -->
+  <g stroke="#333" stroke-width="1.4">
+    <line x1="990" y1="1480" x2="990" y2="1520"/>
+    <line x1="1060" y1="1480" x2="1060" y2="1520"/><line x1="1095" y1="1480" x2="1095" y2="1520"/>
+    <line x1="1130" y1="1480" x2="1130" y2="1520"/><line x1="1165" y1="1480" x2="1165" y2="1520"/>
+    <line x1="1215" y1="1480" x2="1215" y2="1520"/><line x1="1252" y1="1480" x2="1252" y2="1520"/>
+    <line x1="1289" y1="1480" x2="1289" y2="1520"/><line x1="1326" y1="1480" x2="1326" y2="1520"/>
+    <line x1="1363" y1="1480" x2="1363" y2="1520"/><line x1="1400" y1="1480" x2="1400" y2="1520"/>
+  </g>
+  <g font-size="9.5" font-weight="bold" fill="#1F4E79">
+    <text x="994" y="1503">35</text>
+    <text x="1064" y="1503">1</text><text x="1099" y="1503">2</text>
+    <text x="1134" y="1503">42</text><text x="1169" y="1503">41</text>
+    <text x="1219" y="1503">9</text><text x="1256" y="1503">11</text>
+    <text x="1293" y="1503">10</text><text x="1330" y="1503">13</text>
+    <text x="1367" y="1503">12</text><text x="1404" y="1503">14</text>
+  </g>
+
+  <!-- ====================== SUBSYSTEM A: KY-024 ====================== -->
+  <g>
+    <rect x="70" y="590" width="860" height="490" stroke="#2E6B34" stroke-width="1.4" stroke-dasharray="10 5"/>
+    <text x="82" y="612" font-size="13" font-weight="bold" fill="#2E6B34">PHYSICAL FLOOR CONFIRMATION &#8212; KY-024 HALL-EFFECT SENSORS</text>
+
+    <!-- magnet -->
+    <rect x="100" y="770" width="280" height="120" stroke="#777" stroke-width="1.4" stroke-dasharray="6 5"/>
+    <text x="240" y="806" font-size="12" font-weight="bold" fill="#555" text-anchor="middle">CABIN-MOUNTED MAGNET</text>
+    <text x="240" y="826" font-size="10.5" fill="#555" text-anchor="middle">permanent magnet on moving cabin</text>
+    <text x="240" y="846" font-size="10.5" fill="#555" text-anchor="middle">magnetic trigger &#8212; non-electrical</text>
+    <g stroke="#777" stroke-width="1.4" stroke-dasharray="6 5">
+      <line x1="380" y1="795" x2="560" y2="672"/>
+      <line x1="380" y1="815" x2="560" y2="782"/>
+      <line x1="380" y1="835" x2="560" y2="892"/>
+      <line x1="380" y1="855" x2="560" y2="1002"/>
+    </g>
+
+    <!-- modules -->
+    <!-- F0 -->
+    <rect x="560" y="624" width="270" height="96" stroke="#000" stroke-width="1.8"/>
+    <text x="695" y="646" font-size="12.5" font-weight="bold" fill="#000" text-anchor="middle">U5 &#8212; KY-024 F0</text>
+    <text x="695" y="662" font-size="10" fill="#555" text-anchor="middle">Hall sensor module, comparator DO</text>
+    <text x="570" y="652" font-size="10" font-weight="bold" fill="#D96D00">VCC</text>
+    <text x="820" y="676" font-size="10" font-weight="bold" fill="#000" text-anchor="end">OUT</text>
+    <line x1="520" y1="648" x2="560" y2="648" stroke="#D96D00" stroke-width="2.4"/>
+    <circle cx="520" cy="648" r="4" fill="#D96D00"/>
+    <line x1="695" y1="720" x2="695" y2="730" stroke="#000" stroke-width="1.6"/>
+    <use xlink:href="#gnd" x="695" y="730"/>
+    <!-- F1 -->
+    <rect x="560" y="734" width="270" height="96" stroke="#000" stroke-width="1.8"/>
+    <text x="695" y="756" font-size="12.5" font-weight="bold" fill="#000" text-anchor="middle">U6 &#8212; KY-024 F1</text>
+    <text x="695" y="772" font-size="10" fill="#555" text-anchor="middle">Hall sensor module, comparator DO</text>
+    <text x="570" y="762" font-size="10" font-weight="bold" fill="#D96D00">VCC</text>
+    <text x="820" y="786" font-size="10" font-weight="bold" fill="#000" text-anchor="end">OUT</text>
+    <line x1="520" y1="758" x2="560" y2="758" stroke="#D96D00" stroke-width="2.4"/>
+    <circle cx="520" cy="758" r="4" fill="#D96D00"/>
+    <line x1="695" y1="830" x2="695" y2="840" stroke="#000" stroke-width="1.6"/>
+    <use xlink:href="#gnd" x="695" y="840"/>
+    <!-- F2 -->
+    <rect x="560" y="844" width="270" height="96" stroke="#000" stroke-width="1.8"/>
+    <text x="695" y="866" font-size="12.5" font-weight="bold" fill="#000" text-anchor="middle">U7 &#8212; KY-024 F2</text>
+    <text x="695" y="882" font-size="10" fill="#555" text-anchor="middle">Hall sensor module, comparator DO</text>
+    <text x="570" y="872" font-size="10" font-weight="bold" fill="#D96D00">VCC</text>
+    <text x="820" y="896" font-size="10" font-weight="bold" fill="#000" text-anchor="end">OUT</text>
+    <line x1="520" y1="868" x2="560" y2="868" stroke="#D96D00" stroke-width="2.4"/>
+    <circle cx="520" cy="868" r="4" fill="#D96D00"/>
+    <line x1="695" y1="940" x2="695" y2="950" stroke="#000" stroke-width="1.6"/>
+    <use xlink:href="#gnd" x="695" y="950"/>
+    <!-- F3 -->
+    <rect x="560" y="954" width="270" height="96" stroke="#000" stroke-width="1.8"/>
+    <text x="695" y="976" font-size="12.5" font-weight="bold" fill="#000" text-anchor="middle">U8 &#8212; KY-024 F3</text>
+    <text x="695" y="992" font-size="10" fill="#555" text-anchor="middle">Hall sensor module, comparator DO</text>
+    <text x="570" y="982" font-size="10" font-weight="bold" fill="#D96D00">VCC</text>
+    <text x="820" y="1006" font-size="10" font-weight="bold" fill="#000" text-anchor="end">OUT</text>
+    <line x1="520" y1="978" x2="560" y2="978" stroke="#D96D00" stroke-width="2.4"/>
+    <line x1="695" y1="1050" x2="695" y2="1060" stroke="#000" stroke-width="1.6"/>
+    <use xlink:href="#gnd" x="695" y="1060"/>
+
+    <!-- OUT wires -->
+    <g stroke="#333" stroke-width="1.4">
+      <polyline points="830,672 880,672 880,640 960,640"/>
+      <polyline points="830,782 900,782 900,680 960,680"/>
+      <polyline points="830,892 920,892 920,720 960,720"/>
+      <polyline points="830,1002 940,1002 940,760 960,760"/>
+    </g>
+    <text x="944" y="633" font-size="9.5" fill="#555" text-anchor="end">F0 OUT</text>
+    <text x="944" y="673" font-size="9.5" fill="#555" text-anchor="end">F1 OUT</text>
+    <text x="944" y="713" font-size="9.5" fill="#555" text-anchor="end">F2 OUT</text>
+    <text x="944" y="753" font-size="9.5" fill="#555" text-anchor="end">F3 OUT</text>
+    <!-- caution markers -->
+    <use xlink:href="#warn" x="852" y="806"/>
+    <text x="866" y="810" font-size="10" font-weight="bold" fill="#B45309">C2</text>
+    <use xlink:href="#warn" x="852" y="916"/>
+    <text x="866" y="920" font-size="10" font-weight="bold" fill="#B45309">C3</text>
+    <use xlink:href="#warn" x="852" y="1026"/>
+    <text x="866" y="1030" font-size="10" font-weight="bold" fill="#B45309">C1</text>
+
+    <text x="100" y="1000" font-size="10.5" fill="#2E6B34">VCC = ATX +3.3 V (orange) &#183; DO 3.3 V-safe for direct input</text>
+    <text x="100" y="1018" font-size="10.5" fill="#2E6B34">Output polarity must be bench-tested (G4) &#183; debounce in firmware</text>
+    <text x="100" y="1036" font-size="10.5" fill="#2E6B34">Route sensor wires away from motor wires (G5)</text>
+  </g>
+
+  <!-- ====================== SUBSYSTEM B: SPDT + TRUTH TABLE ====================== -->
+  <g>
+    <rect x="70" y="1095" width="860" height="300" stroke="#6B4226" stroke-width="1.4" stroke-dasharray="10 5"/>
+    <text x="82" y="1117" font-size="13" font-weight="bold" fill="#6B4226">DOOR END-POSITION CONFIRMATION &#8212; SPDT LIMIT SWITCHES</text>
+
+    <!-- S1 -->
+    <rect x="560" y="1105" width="270" height="100" stroke="#000" stroke-width="1.8"/>
+    <text x="695" y="1125" font-size="12" font-weight="bold" fill="#000" text-anchor="middle">S1 &#8212; DOOR FULLY-OPEN (SPDT)</text>
+    <circle cx="600" cy="1168" r="3" fill="#000"/>
+    <line x1="600" y1="1168" x2="646" y2="1147" stroke="#000" stroke-width="1.8"/>
+    <circle cx="650" cy="1145" r="3" fill="#000"/>
+    <circle cx="650" cy="1185" r="3" fill="#000"/>
+    <line x1="650" y1="1145" x2="830" y2="1145" stroke="#333" stroke-width="1.4"/>
+    <text x="660" y="1138" font-size="10" font-weight="bold" fill="#000">NC</text>
+    <text x="660" y="1196" font-size="10" fill="#777">NO &#8212; n.c. (unused)</text>
+    <text x="592" y="1162" font-size="10" font-weight="bold" fill="#000" text-anchor="end">COM</text>
+    <polyline points="600,1168 575,1168 575,1180" stroke="#000" stroke-width="1.6"/>
+    <use xlink:href="#gnd" x="575" y="1180"/>
+    <!-- S2 -->
+    <rect x="560" y="1225" width="270" height="100" stroke="#000" stroke-width="1.8"/>
+    <text x="695" y="1245" font-size="12" font-weight="bold" fill="#000" text-anchor="middle">S2 &#8212; DOOR FULLY-CLOSED (SPDT)</text>
+    <circle cx="600" cy="1288" r="3" fill="#000"/>
+    <line x1="600" y1="1288" x2="646" y2="1267" stroke="#000" stroke-width="1.8"/>
+    <circle cx="650" cy="1265" r="3" fill="#000"/>
+    <circle cx="650" cy="1305" r="3" fill="#000"/>
+    <line x1="650" y1="1265" x2="830" y2="1265" stroke="#333" stroke-width="1.4"/>
+    <text x="660" y="1258" font-size="10" font-weight="bold" fill="#000">NC</text>
+    <text x="660" y="1316" font-size="10" fill="#777">NO &#8212; n.c. (unused)</text>
+    <text x="592" y="1282" font-size="10" font-weight="bold" fill="#000" text-anchor="end">COM</text>
+    <polyline points="600,1288 575,1288 575,1300" stroke="#000" stroke-width="1.6"/>
+    <use xlink:href="#gnd" x="575" y="1300"/>
+
+    <!-- wires to ESP32 -->
+    <line x1="830" y1="1145" x2="960" y2="1145" stroke="#333" stroke-width="1.4"/>
+    <polyline points="830,1265 905,1265 905,1185 960,1185" stroke="#333" stroke-width="1.4"/>
+    <text x="944" y="1138" font-size="9.5" fill="#555" text-anchor="end">DOOR_OPEN_LIMIT</text>
+    <text x="944" y="1178" font-size="9.5" fill="#555" text-anchor="end">DOOR_CLOSED_LIMIT</text>
+    <text x="840" y="1162" font-size="9" fill="#555">internal pull-up</text>
+    <text x="840" y="1282" font-size="9" fill="#555">internal pull-up</text>
+
+    <!-- truth table -->
+    <g stroke="#6B4226" stroke-width="1">
+      <rect x="90" y="1130" width="450" height="118"/>
+      <line x1="90" y1="1158" x2="540" y2="1158"/>
+      <line x1="90" y1="1188" x2="540" y2="1188"/>
+      <line x1="90" y1="1218" x2="540" y2="1218"/>
+      <line x1="208" y1="1130" x2="208" y2="1248"/>
+      <line x1="318" y1="1130" x2="318" y2="1248"/>
+      <line x1="402" y1="1130" x2="402" y2="1248"/>
+    </g>
+    <g font-size="10" font-weight="bold" fill="#6B4226">
+      <text x="98" y="1149">Condition</text>
+      <text x="216" y="1149">NC contact</text>
+      <text x="326" y="1149">GPIO level</text>
+      <text x="410" y="1149">Meaning</text>
+    </g>
+    <g font-size="10" fill="#000">
+      <text x="98" y="1178">Away from limit</text><text x="216" y="1178">Closed to GND</text><text x="326" y="1178">LOW</text><text x="410" y="1178">Not reached</text>
+      <text x="98" y="1208">Limit reached</text><text x="216" y="1208">Open</text><text x="326" y="1208">HIGH</text><text x="410" y="1208">End position confirmed</text>
+      <text x="98" y="1238">Wire broken</text><text x="216" y="1238">Open / floating</text><text x="326" y="1238">HIGH / fault</text><text x="410" y="1238">Requires fault handling</text>
+    </g>
+
+    <!-- notes -->
+    <g font-size="10.5" fill="#6B4226">
+      <text x="90" y="1272">&#8226; Recommended NC wiring with pull-up (COM&#8594;GND, NC&#8594;GPIO); final logic must match firmware.</text>
+      <text x="90" y="1292">&#8226; Debounce required in firmware or hardware (&#8805; 20 ms).</text>
+      <text x="90" y="1312">&#8226; Open-limit AND closed-limit active simultaneously is invalid &#8594; raise a fault.</text>
+      <text x="90" y="1332">&#8226; Door obstruction sensing is NOT included (G6). Door motor stops on limit confirmation (see U3).</text>
+      <text x="90" y="1352">&#8226; Pins GPIO7 / GPIO15: design assignment &#8212; not yet present in firmware v6 (G4).</text>
+      <text x="90" y="1372">&#8226; Switch contacts carry only 3.3 V pull-up current &#8212; no 5 V is injected into ESP32 GPIOs.</text>
+    </g>
+  </g>
+
+  <!-- ====================== SUBSYSTEM C: POTS ====================== -->
+  <g>
+    <rect x="70" y="1410" width="860" height="215" stroke="#444" stroke-width="1.4" stroke-dasharray="10 5"/>
+    <text x="920" y="1432" font-size="13" font-weight="bold" fill="#444" text-anchor="end">SIMULATED TELEMETRY PROXIES &#8212; NOT CALIBRATED SENSORS</text>
+
+    <!-- RV1 -->
+    <use xlink:href="#flag3v3esp" x="220" y="1450"/>
+    <rect x="210" y="1450" width="20" height="40" stroke="#000" stroke-width="1.6"/>
+    <path d="M 248 1470 L 234 1470 L 240 1464 M 234 1470 L 240 1476" stroke="#000" stroke-width="1.4"/>
+    <polyline points="248,1470 862,1470 862,1285 960,1285" stroke="#333" stroke-width="1.4"/>
+    <line x1="220" y1="1490" x2="220" y2="1500" stroke="#000" stroke-width="1.6"/>
+    <use xlink:href="#gnd" x="220" y="1500"/>
+    <text x="220" y="1548" font-size="11" font-weight="bold" fill="#000" text-anchor="middle">RV1 10 k&#937;</text>
+    <text x="220" y="1564" font-size="10" fill="#555" text-anchor="middle">simulated temperature proxy</text>
+    <!-- RV2 -->
+    <use xlink:href="#flag3v3esp" x="480" y="1495"/>
+    <rect x="470" y="1495" width="20" height="40" stroke="#000" stroke-width="1.6"/>
+    <path d="M 508 1515 L 494 1515 L 500 1509 M 494 1515 L 500 1521" stroke="#000" stroke-width="1.4"/>
+    <polyline points="508,1515 888,1515 888,1325 960,1325" stroke="#333" stroke-width="1.4"/>
+    <line x1="480" y1="1535" x2="480" y2="1545" stroke="#000" stroke-width="1.6"/>
+    <use xlink:href="#gnd" x="480" y="1545"/>
+    <text x="480" y="1593" font-size="11" font-weight="bold" fill="#000" text-anchor="middle">RV2 10 k&#937;</text>
+    <text x="480" y="1609" font-size="10" fill="#555" text-anchor="middle">simulated vibration proxy</text>
+    <!-- RV3 -->
+    <use xlink:href="#flag3v3esp" x="740" y="1540"/>
+    <rect x="730" y="1540" width="20" height="40" stroke="#000" stroke-width="1.6"/>
+    <path d="M 768 1560 L 754 1560 L 760 1554 M 754 1560 L 760 1566" stroke="#000" stroke-width="1.4"/>
+    <polyline points="768,1560 914,1560 914,1365 960,1365" stroke="#333" stroke-width="1.4"/>
+    <line x1="740" y1="1580" x2="740" y2="1590" stroke="#000" stroke-width="1.6"/>
+    <use xlink:href="#gnd" x="740" y="1590"/>
+    <text x="845" y="1604" font-size="11" font-weight="bold" fill="#000" text-anchor="middle">RV3 10 k&#937; &#8212; simulated load proxy</text>
+  </g>
+
+  <!-- ====================== RIGHT COLUMN ====================== -->
+  <!-- U2 stepper driver -->
+  <g>
+    <rect x="1560" y="470" width="320" height="175" stroke="#000" stroke-width="2.2"/>
+    <text x="1720" y="494" font-size="14" font-weight="bold" fill="#000" text-anchor="middle">U2 &#8212; MICROSTEP DRIVER</text>
+    <text x="1568" y="505" font-size="10" fill="#000">PUL/STEP</text>
+    <text x="1568" y="545" font-size="10" fill="#000">DIR</text>
+    <text x="1568" y="630" font-size="10" fill="#777">ENA &#8212; n.c. / per driver manual (TBD)</text>
+    <text x="1872" y="514" font-size="10" fill="#000" text-anchor="end">A+</text>
+    <text x="1872" y="549" font-size="10" fill="#000" text-anchor="end">A&#8722;</text>
+    <text x="1872" y="584" font-size="10" fill="#000" text-anchor="end">B+</text>
+    <text x="1872" y="619" font-size="10" fill="#000" text-anchor="end">B&#8722;</text>
+    <line x1="1410" y1="500" x2="1560" y2="500" stroke="#333" stroke-width="1.4"/>
+    <line x1="1410" y1="540" x2="1560" y2="540" stroke="#333" stroke-width="1.4"/>
+    <text x="1424" y="493" font-size="9.5" fill="#555">STEP/PUL</text>
+    <text x="1424" y="533" font-size="9.5" fill="#555">DIR</text>
+    <use xlink:href="#flag12" x="1640" y="470"/>
+    <text x="1700" y="450" font-size="10" fill="#555">VMOT &#8212; TBD / actuator rail (verify driver supply range)</text>
+    <text x="1570" y="565" font-size="10" fill="#2E6B34">Stepper profile controls travel;</text>
+    <text x="1570" y="581" font-size="10" fill="#2E6B34">KY-024 confirms floor arrival.</text>
+    <text x="1570" y="597" font-size="10" fill="#555">Driver current per NEMA17; DIP TBD.</text>
+    <line x1="1600" y1="645" x2="1600" y2="655" stroke="#000" stroke-width="1.6"/>
+    <use xlink:href="#gnd" x="1600" y="655"/>
+    <g stroke="#333" stroke-width="1.4">
+      <line x1="1880" y1="510" x2="1908" y2="528"/>
+      <line x1="1880" y1="545" x2="1904" y2="551"/>
+      <line x1="1880" y1="580" x2="1904" y2="572"/>
+      <line x1="1880" y1="615" x2="1908" y2="594"/>
+    </g>
+    <circle cx="1960" cy="560" r="58" stroke="#000" stroke-width="2.2"/>
+    <text x="1960" y="556" font-size="14" font-weight="bold" fill="#000" text-anchor="middle">M1</text>
+    <text x="1960" y="574" font-size="10" fill="#000" text-anchor="middle">NEMA17 stepper</text>
+    <text x="1960" y="589" font-size="9.5" fill="#555" text-anchor="middle">cabin hoist</text>
+  </g>
+
+  <!-- U3 L298N -->
+  <g>
+    <rect x="1560" y="700" width="320" height="160" stroke="#000" stroke-width="2.2"/>
+    <text x="1720" y="722" font-size="14" font-weight="bold" fill="#000" text-anchor="middle">U3 &#8212; L298N / HW-095</text>
+    <text x="1720" y="738" font-size="10" fill="#555" text-anchor="middle">dual H-bridge &#8212; door drive</text>
+    <text x="1568" y="734" font-size="10" fill="#000">IN1</text>
+    <text x="1568" y="774" font-size="10" fill="#000">IN2</text>
+    <text x="1568" y="814" font-size="10" fill="#000">ENA/PWM</text>
+    <text x="1872" y="754" font-size="10" fill="#000" text-anchor="end">OUT1</text>
+    <text x="1872" y="794" font-size="10" fill="#000" text-anchor="end">OUT2</text>
+    <polyline points="1410,620 1510,620 1510,730 1560,730" stroke="#333" stroke-width="1.4"/>
+    <polyline points="1410,660 1480,660 1480,770 1560,770" stroke="#333" stroke-width="1.4"/>
+    <polyline points="1410,700 1450,700 1450,810 1560,810" stroke="#333" stroke-width="1.4"/>
+    <text x="1424" y="613" font-size="9.5" fill="#555">IN1</text>
+    <text x="1424" y="653" font-size="9.5" fill="#555">IN2</text>
+    <text x="1424" y="693" font-size="9.5" fill="#555">EN/PWM</text>
+    <use xlink:href="#flag12" x="1640" y="700"/>
+    <text x="1700" y="680" font-size="10" fill="#555">VS &#8212; actuator rail; 5 V logic from on-board reg (jumper, TBD)</text>
+    <line x1="1640" y1="860" x2="1640" y2="870" stroke="#000" stroke-width="1.6"/>
+    <use xlink:href="#gnd" x="1640" y="870"/>
+    <line x1="1880" y1="750" x2="1916" y2="757" stroke="#333" stroke-width="1.4"/>
+    <line x1="1880" y1="790" x2="1916" y2="785" stroke="#333" stroke-width="1.4"/>
+    <circle cx="1960" cy="772" r="48" stroke="#000" stroke-width="2.2"/>
+    <text x="1960" y="768" font-size="14" font-weight="bold" fill="#000" text-anchor="middle">M2</text>
+    <text x="1960" y="786" font-size="10" fill="#000" text-anchor="middle">DC door motor</text>
+    <text x="2040" y="842" font-size="10" fill="#6B4226" text-anchor="end">Door dwell starts only after open-limit (S1) confirmation.</text>
+  </g>
+
+  <!-- K1 relay -->
+  <g>
+    <rect x="1560" y="900" width="300" height="140" stroke="#000" stroke-width="2.2"/>
+    <text x="1710" y="922" font-size="14" font-weight="bold" fill="#000" text-anchor="middle">K1 &#8212; JQC3F-05VDC-C</text>
+    <text x="1710" y="938" font-size="10" fill="#555" text-anchor="middle">relay module &#8212; cooling fan</text>
+    <text x="1568" y="954" font-size="10" fill="#000">IN</text>
+    <text x="1852" y="939" font-size="10" fill="#000" text-anchor="end">COM</text>
+    <text x="1852" y="969" font-size="10" fill="#000" text-anchor="end">NO</text>
+    <text x="1852" y="999" font-size="10" fill="#777" text-anchor="end">NC &#8212; n.c.</text>
+    <polyline points="1410,860 1530,860 1530,950 1560,950" stroke="#333" stroke-width="1.4"/>
+    <text x="1424" y="853" font-size="9.5" fill="#555">FAN_RELAY (active-LOW, firmware-confirmed)</text>
+    <use xlink:href="#flag5" x="1680" y="900"/>
+    <text x="1712" y="882" font-size="10" fill="#555">module VCC &#8212; coil side (opto/transistor: TBD)</text>
+    <line x1="1620" y1="1040" x2="1620" y2="1050" stroke="#000" stroke-width="1.6"/>
+    <use xlink:href="#gnd" x="1620" y="1050"/>
+    <line x1="1860" y1="935" x2="1890" y2="935" stroke="#A07D00" stroke-width="2.4"/>
+    <use xlink:href="#flag12" x="1890" y="935"/>
+    <line x1="1860" y1="965" x2="1915" y2="965" stroke="#333" stroke-width="1.4"/>
+    <circle cx="1957" cy="965" r="42" stroke="#000" stroke-width="2.2"/>
+    <text x="1957" y="961" font-size="13" font-weight="bold" fill="#000" text-anchor="middle">M3</text>
+    <text x="1957" y="978" font-size="10" fill="#000" text-anchor="middle">12 V fan</text>
+    <line x1="1957" y1="1007" x2="1957" y2="1017" stroke="#000" stroke-width="1.6"/>
+    <use xlink:href="#gnd" x="1957" y="1017"/>
+    <text x="1900" y="1066" font-size="9.5" fill="#555">FAN_RELAY_ACTIVE_LOW = true</text>
+    <text x="1900" y="1082" font-size="9.5" fill="#555">(firmware) &#8212; relay contact</text>
+    <text x="1900" y="1098" font-size="9.5" fill="#555">switches +12 V to the fan</text>
+  </g>
+
+  <!-- BZ1 active buzzer module (3.3 V) -->
+  <g>
+    <rect x="1560" y="1082" width="300" height="46" stroke="#000" stroke-width="2.2"/>
+    <text x="1710" y="1101" font-size="12.5" font-weight="bold" fill="#000" text-anchor="middle">BZ1 &#8212; ACTIVE BUZZER MODULE, 3.3 V</text>
+    <text x="1710" y="1118" font-size="9.5" fill="#555" text-anchor="middle">SIG &#8594; GPIO19 &#183; sinks: ON = LOW; OFF = INPUT_PULLUP (C5)</text>
+    <!-- VCC from ESP32 3V3 LDO (not +5 V / +12 V) -->
+    <use xlink:href="#flag3v3esp" x="1700" y="1082"/>
+    <text x="1716" y="1078" font-size="9" fill="#7A1F1F">VCC</text>
+    <!-- GND to common ground (COMMON_GND, per legend) -->
+    <line x1="1620" y1="1128" x2="1620" y2="1134" stroke="#000" stroke-width="1.6"/>
+    <use xlink:href="#gnd" x="1620" y="1134"/>
+    <!-- SIG from GPIO19 -->
+    <polyline points="1410,1080 1490,1080 1490,1105 1560,1105" stroke="#333" stroke-width="1.4"/>
+    <text x="1424" y="1073" font-size="9.5" fill="#555">BUZZER</text>
+  </g>
+
+  <!-- DS1 LCD -->
+  <g>
+    <rect x="1560" y="1162" width="320" height="120" stroke="#000" stroke-width="2.2"/>
+    <text x="1720" y="1184" font-size="14" font-weight="bold" fill="#000" text-anchor="middle">DS1 &#8212; LCD 1604A + PCF8574</text>
+    <text x="1720" y="1200" font-size="10" fill="#555" text-anchor="middle">I2C backpack, address 0x27</text>
+    <text x="1568" y="1226" font-size="10" fill="#000">SDA</text>
+    <text x="1568" y="1256" font-size="10" fill="#000">SCL</text>
+    <text x="1740" y="1244" font-size="10" fill="#B45309" text-anchor="middle">if 5 V module &#8594; level shifter on SDA/SCL (G1)</text>
+    <polyline points="1410,1160 1505,1160 1505,1222 1560,1222" stroke="#333" stroke-width="1.4"/>
+    <polyline points="1410,1200 1480,1200 1480,1252 1560,1252" stroke="#333" stroke-width="1.4"/>
+    <text x="1424" y="1153" font-size="9.5" fill="#555">SDA (50 kHz I2C)</text>
+    <text x="1424" y="1193" font-size="9.5" fill="#555">SCL</text>
+    <use xlink:href="#flag5" x="1640" y="1162"/>
+    <use xlink:href="#warn" x="1676" y="1150"/>
+    <text x="1692" y="1154" font-size="10" fill="#B45309">VCC TBD 3.3 V / 5 V</text>
+    <line x1="1850" y1="1282" x2="1850" y2="1292" stroke="#000" stroke-width="1.6"/>
+    <use xlink:href="#gnd" x="1850" y="1292"/>
+  </g>
+
+  <!-- U4 RFID -->
+  <g>
+    <rect x="1560" y="1320" width="300" height="210" stroke="#000" stroke-width="2.2"/>
+    <text x="1710" y="1342" font-size="14" font-weight="bold" fill="#000" text-anchor="middle">U4 &#8212; MFRC522 RFID READER</text>
+    <text x="1710" y="1358" font-size="10.5" font-weight="bold" fill="#B45309" text-anchor="middle">3.3 V logic ONLY &#8212; SPI</text>
+    <text x="1568" y="1374" font-size="10" fill="#000">SDA/SS</text>
+    <text x="1568" y="1406" font-size="10" fill="#000">RST</text>
+    <text x="1568" y="1438" font-size="10" fill="#000">SCK</text>
+    <text x="1568" y="1470" font-size="10" fill="#000">MISO &#8594; U1</text>
+    <text x="1568" y="1502" font-size="10" fill="#000">MOSI</text>
+    <text x="1710" y="1522" font-size="9.5" fill="#555" text-anchor="middle">security block &#8212; RFID access control for cabin/hall calls</text>
+    <polyline points="1410,1330 1540,1330 1540,1370 1560,1370" stroke="#333" stroke-width="1.4"/>
+    <polyline points="1410,1362 1525,1362 1525,1402 1560,1402" stroke="#333" stroke-width="1.4"/>
+    <polyline points="1410,1394 1510,1394 1510,1434 1560,1434" stroke="#333" stroke-width="1.4"/>
+    <polyline points="1410,1426 1495,1426 1495,1466 1560,1466" stroke="#333" stroke-width="1.4"/>
+    <polyline points="1410,1458 1480,1458 1480,1498 1560,1498" stroke="#333" stroke-width="1.4"/>
+    <use xlink:href="#flag3v3esp" x="1700" y="1320"/>
+    <text x="1736" y="1306" font-size="10" fill="#555">3.3 V from U1 LDO (bench-confirm)</text>
+    <polyline points="1860,1515 1885,1515 1885,1526" stroke="#000" stroke-width="1.6"/>
+    <use xlink:href="#gnd" x="1885" y="1526"/>
+  </g>
+
+  <!-- ====================== GPIO CAUTION NOTES ====================== -->
+  <g>
+    <rect x="2050" y="430" width="306" height="670" stroke="#B45309" stroke-width="2.4"/>
+    <use xlink:href="#warn" x="2074" y="456"/>
+    <text x="2090" y="460" font-size="14" font-weight="bold" fill="#B45309">GPIO CAUTION NOTES</text>
+    <g font-size="10.5" fill="#000">
+      <text x="2062" y="488" font-weight="bold" fill="#B45309">C1 &#8212; GPIO0 (KY-024 F3) &#8212; BOOT strap</text>
+      <text x="2062" y="504">Verify KY-024 output level during reset;</text>
+      <text x="2062" y="520">incorrect level may affect boot mode.</text>
+      <text x="2062" y="536">Test with cabin magnet parked at F3.</text>
+      <text x="2062" y="566" font-weight="bold" fill="#B45309">C2 &#8212; GPIO3 (KY-024 F1) &#8212; strap/JTAG</text>
+      <text x="2062" y="582">Strapping/JTAG-sensitive depending on</text>
+      <text x="2062" y="598">board configuration. Verify reset-state</text>
+      <text x="2062" y="614">level; avoid unwanted pull during boot.</text>
+      <text x="2062" y="644" font-weight="bold" fill="#B45309">C3 &#8212; GPIO46 (KY-024 F2) &#8212; strap pin</text>
+      <text x="2062" y="660">Special strapping/input-sensitive pin.</text>
+      <text x="2062" y="676">Board-specific verification required</text>
+      <text x="2062" y="692">before final wiring.</text>
+      <text x="2062" y="722" font-weight="bold" fill="#B45309">C4 &#8212; GPIO45 (RC522 SS) &#8212; strap pin</text>
+      <text x="2062" y="738">VDD_SPI voltage strap. Check boot-state</text>
+      <text x="2062" y="754">pull level when the RFID module is</text>
+      <text x="2062" y="770">connected.</text>
+      <text x="2062" y="800" font-weight="bold" fill="#B45309">C5 &#8212; GPIO19 / GPIO20 &#8212; native USB</text>
+      <text x="2062" y="816">Buzzer / RC522 RST sit on USB D&#8722;/D+.</text>
+      <text x="2062" y="832">May interfere with native USB/JTAG/CDC;</text>
+      <text x="2062" y="848">verify upload and debug method.</text>
+      <text x="2062" y="878" font-weight="bold" fill="#B45309">C6 &#8212; GPIO35/36/37 &#8212; board variant</text>
+      <text x="2062" y="894">E-stop / door EN / door IN2 pins are</text>
+      <text x="2062" y="910">unavailable on octal-PSRAM (R8V)</text>
+      <text x="2062" y="926">modules; verify DevKitC-1 variant.</text>
+    </g>
+    <text x="2062" y="960" font-size="10" fill="#555">Markers C1&#8211;C6 appear next to the affected</text>
+    <text x="2062" y="976" font-size="10" fill="#555">wires/pins on this sheet. All cautions are</text>
+    <text x="2062" y="992" font-size="10" fill="#555">design checks to close during the bench</text>
+    <text x="2062" y="1008" font-size="10" fill="#555">campaign &#8212; none is a confirmed fault.</text>
+    <text x="2062" y="1040" font-size="10" fill="#555" font-style="italic">Keep GPIO43/44 (UART0) free for the</text>
+    <text x="2062" y="1056" font-size="10" fill="#555" font-style="italic">serial console; GPIO26&#8211;32 are flash/PSRAM</text>
+    <text x="2062" y="1072" font-size="10" fill="#555" font-style="italic">pins and must never be used.</text>
+  </g>
+
+  <!-- ====================== SOFTWARE BOUNDARY ====================== -->
+  <g>
+    <rect x="1900" y="1160" width="456" height="150" stroke="#666" stroke-width="1.6" stroke-dasharray="10 4 3 4"/>
+    <text x="2128" y="1184" font-size="12" font-weight="bold" fill="#555" text-anchor="middle">SOFTWARE / NETWORK &#8212; NOT PHYSICAL WIRING</text>
+    <text x="2128" y="1208" font-size="10.5" fill="#555" text-anchor="middle">U1 Wi-Fi 2.4 GHz &#8594; MQTT (TLS) &#8594; Mosquitto broker</text>
+    <text x="2128" y="1228" font-size="10.5" fill="#555" text-anchor="middle">&#8594; telemetry bridge &#8594; Eclipse Ditto digital twin</text>
+    <text x="2128" y="1248" font-size="10.5" fill="#555" text-anchor="middle">&#8594; ElevatorOS SCADA dashboard</text>
+    <text x="2128" y="1272" font-size="9.5" fill="#777" text-anchor="middle">wireless link from U1 radio (see note inside U1) &#8212; no cable;</text>
+    <text x="2128" y="1288" font-size="9.5" fill="#777" text-anchor="middle">commands re-enter U1 over the same MQTT session</text>
+  </g>
+
+  <!-- ====================== TITLE BLOCK ====================== -->
+  <g>
+    <rect x="2050" y="1340" width="306" height="180" stroke="#000" stroke-width="2"/>
+    <line x1="2050" y1="1372" x2="2356" y2="1372" stroke="#000" stroke-width="1"/>
+    <line x1="2050" y1="1412" x2="2356" y2="1412" stroke="#000" stroke-width="1"/>
+    <line x1="2050" y1="1452" x2="2356" y2="1452" stroke="#000" stroke-width="1"/>
+    <line x1="2050" y1="1486" x2="2356" y2="1486" stroke="#000" stroke-width="1"/>
+    <text x="2060" y="1361" font-size="11" font-weight="bold" fill="#000">GENERAL ELECTRICAL SCHEMATIC &#8212; REV C</text>
+    <text x="2060" y="1388" font-size="9.5" fill="#000">Project: Agentic AI-Driven Digital Twin for</text>
+    <text x="2060" y="1403" font-size="9.5" fill="#000">Smart &amp; Secure Elevator Management</text>
+    <text x="2060" y="1428" font-size="9.5" fill="#000">Reduced-scale 4-floor ESP32-S3 elevator</text>
+    <text x="2060" y="1443" font-size="9.5" fill="#000">prototype &#8212; master thesis figure</text>
+    <text x="2060" y="1474" font-size="9.5" fill="#000">Author: Abderrahmane Zaouidi &#183; 2026-06-11</text>
+    <text x="2060" y="1502" font-size="9.5" fill="#000">Sheet 1/1 (A4 landscape) &#183; Scale NTS &#183; Rev C &#183;</text>
+    <text x="2060" y="1515" font-size="9.5" font-weight="bold" fill="#000">Thesis documentation &#8212; not for manufacturing</text>
+  </g>
+  <text x="1905" y="1380" font-size="10" fill="#555">Security side-note:</text>
+  <text x="1905" y="1396" font-size="10" fill="#555">RFID gating applies to</text>
+  <text x="1905" y="1412" font-size="10" fill="#555">cabin and hall calls</text>
+  <text x="1905" y="1428" font-size="10" fill="#555">(firmware policy).</text>
+
+  <!-- ====================== BOTTOM PANELS ====================== -->
+  <!-- e-stop -->
+  <g>
+    <rect x="945" y="1520" width="90" height="130" stroke="#B00000" stroke-width="2"/>
+    <text x="990" y="1542" font-size="10.5" font-weight="bold" fill="#B00000" text-anchor="middle">S3 &#8212; EMERG.</text>
+    <text x="990" y="1556" font-size="10.5" font-weight="bold" fill="#B00000" text-anchor="middle">STOP</text>
+    <circle cx="990" cy="1582" r="10" stroke="#B00000" stroke-width="1.8"/>
+    <text x="990" y="1614" font-size="9" fill="#555" text-anchor="middle">push to GND</text>
+    <text x="990" y="1627" font-size="9" fill="#555" text-anchor="middle">pull-up &#183; active-LOW</text>
+    <text x="990" y="1640" font-size="9" fill="#B45309" text-anchor="middle">GPIO35 &#8212; C6</text>
+  </g>
+  <!-- cabin panel -->
+  <g>
+    <rect x="1045" y="1520" width="135" height="130" stroke="#000" stroke-width="2"/>
+    <text x="1112" y="1540" font-size="10.5" font-weight="bold" fill="#000" text-anchor="middle">CABIN CALL PANEL</text>
+    <g stroke="#000" stroke-width="1.4">
+      <circle cx="1060" cy="1566" r="8"/><circle cx="1095" cy="1566" r="8"/>
+      <circle cx="1130" cy="1566" r="8"/><circle cx="1165" cy="1566" r="8"/>
+    </g>
+    <g font-size="9" fill="#000" text-anchor="middle">
+      <text x="1060" y="1590">F0</text><text x="1095" y="1590">F1</text>
+      <text x="1130" y="1590">F2</text><text x="1165" y="1590">F3</text>
+    </g>
+    <text x="1112" y="1612" font-size="9" fill="#555" text-anchor="middle">4 push buttons to common GND</text>
+    <text x="1112" y="1625" font-size="9" fill="#555" text-anchor="middle">internal pull-ups &#8212; active-LOW</text>
+    <line x1="1112" y1="1632" x2="1112" y2="1638" stroke="#000" stroke-width="1.4"/>
+  </g>
+  <!-- hall panel -->
+  <g>
+    <rect x="1200" y="1520" width="225" height="130" stroke="#000" stroke-width="2"/>
+    <text x="1312" y="1540" font-size="10.5" font-weight="bold" fill="#000" text-anchor="middle">HALL CALL PANELS (LANDINGS)</text>
+    <g stroke="#000" stroke-width="1.4">
+      <circle cx="1215" cy="1566" r="8"/><circle cx="1252" cy="1566" r="8"/><circle cx="1289" cy="1566" r="8"/>
+      <circle cx="1326" cy="1566" r="8"/><circle cx="1363" cy="1566" r="8"/><circle cx="1400" cy="1566" r="8"/>
+    </g>
+    <g font-size="9" fill="#000" text-anchor="middle">
+      <text x="1215" y="1590">F0&#9650;</text><text x="1252" y="1590">F1&#9650;</text><text x="1289" y="1590">F1&#9660;</text>
+      <text x="1326" y="1590">F2&#9650;</text><text x="1363" y="1590">F2&#9660;</text><text x="1400" y="1590">F3&#9660;</text>
+    </g>
+    <text x="1312" y="1612" font-size="9" fill="#555" text-anchor="middle">6 push buttons to common GND</text>
+    <text x="1312" y="1625" font-size="9" fill="#555" text-anchor="middle">internal pull-ups &#8212; active-LOW</text>
+  </g>
+
+  <!-- ====================== GENERAL NOTES ====================== -->
+  <g>
+    <rect x="1450" y="1560" width="906" height="92" stroke="#555" stroke-width="1.6"/>
+    <text x="1462" y="1578" font-size="12" font-weight="bold" fill="#000">GENERAL NOTES</text>
+    <g font-size="9.5" fill="#000">
+      <text x="1462" y="1596">G1&#160;ESP32-S3 GPIOs are 3.3 V logic &#8212; NOT 5 V tolerant; check every module VCC.</text>
+      <text x="1462" y="1612">G2&#160;Do NOT tie ATX +3.3 V (orange) to ESP32 3V3 LDO output &#8212; separate sources, common GND only.</text>
+      <text x="1462" y="1628">G3&#160;All ground symbols are one COMMON_GND node (ATX black).</text>
+      <text x="1462" y="1644">G4&#160;KY-024 / SPDT pins are design assignments, not yet in firmware v6; levels pending bench test.</text>
+      <text x="1940" y="1596">G5&#160;Route sensor/button wiring away from motor and relay</text>
+      <text x="1952" y="1612">wiring; logic and actuator power separated, one ground.</text>
+      <text x="1940" y="1632">G6&#160;Door obstruction sensing is not included in this prototype.</text>
+    </g>
+  </g>
+</svg>
