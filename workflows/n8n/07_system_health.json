@@ -47,14 +47,48 @@
     },
     {
       "parameters": {
-        "jsCode": "const base = ($env.DITTO_BASE_URL || 'http://docker-nginx-1').replace(/\\/$/, '');\nconst thingId = $env.PRIMARY_THING_ID || 'building:floor1:elevator';\nconst user = $env.DITTO_USERNAME || 'ditto';\nconst pass = $env.DITTO_PASSWORD || 'ditto';\nconst auth = 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');\nconst now = new Date().toISOString();\n\nlet ditto = { component: 'ditto', status: 'DOWN', latency_ms: 0, error_message: '' };\nconst t0 = Date.now();\ntry {\n  await $http.request({\n    method: 'GET',\n    url: `${base}/api/2/things/${thingId}`,\n    headers: { accept: 'application/json', Authorization: auth },\n    timeout: 4000\n  });\n  ditto.status = 'UP';\n} catch (e) {\n  ditto.error_message = String((e && e.message) || 'ditto_unreachable').slice(0, 200);\n}\nditto.latency_ms = Date.now() - t0;\n\n// Postgres reachability is proven by the upstream Probe Postgres node succeeding;\n// n8n is UP because this Code node is executing.\nreturn [\n  { json: { thing_id: thingId, ...ditto, checked_at: now } },\n  { json: { thing_id: thingId, component: 'postgres', status: 'UP', latency_ms: 0, error_message: '', checked_at: now } },\n  { json: { thing_id: thingId, component: 'n8n', status: 'UP', latency_ms: 0, error_message: '', checked_at: now } }\n];\n"
+        "url": "={{ ($env.DITTO_BASE_URL || 'http://docker-nginx-1') + '/api/2/things/' + ($env.PRIMARY_THING_ID || 'building:floor1:elevator') }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 4000
+        }
+      },
+      "id": "f7000005-0005-4a00-9000-000000000005",
+      "name": "Probe Ditto",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        448,
+        0
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "DHKgydzDWawM8nkx",
+          "name": "Authentication"
+        }
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ditto status comes from the upstream Probe Ditto httpRequest node (success on\n// main output 0, error item on output 1 via continueErrorOutput). Postgres is\n// proven UP by the upstream Probe Postgres node; n8n is UP because this runs.\nconst r = $input.first().json || {};\nconst now = new Date().toISOString();\nconst thingId = $env.PRIMARY_THING_ID || 'building:floor1:elevator';\nconst dittoUp = !!(r.thingId || r.policyId || r.attributes || r.features || r._modified);\nconst dittoErr = dittoUp\n  ? ''\n  : String((r.error && (r.error.message || r.error.description)) || r.message || 'ditto_unreachable_or_error').slice(0, 200);\nreturn [\n  { json: { thing_id: thingId, component: 'ditto', status: dittoUp ? 'UP' : 'DOWN', latency_ms: 0, error_message: dittoErr, checked_at: now } },\n  { json: { thing_id: thingId, component: 'postgres', status: 'UP', latency_ms: 0, error_message: '', checked_at: now } },\n  { json: { thing_id: thingId, component: 'n8n', status: 'UP', latency_ms: 0, error_message: '', checked_at: now } }\n];\n"
       },
       "id": "f7000003-0003-4a00-9000-000000000003",
       "name": "Aggregate Health",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        448,
+        672,
         0
       ]
     },
@@ -71,7 +105,7 @@
       "type": "n8n-nodes-base.postgres",
       "typeVersion": 2.6,
       "position": [
-        672,
+        896,
         0
       ],
       "retryOnFail": true,
@@ -102,6 +136,24 @@
       "main": [
         [
           {
+            "node": "Probe Ditto",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probe Ditto": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Health",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
             "node": "Aggregate Health",
             "type": "main",
             "index": 0
@@ -126,7 +178,7 @@
     "executionOrder": "v1",
     "timezone": "Africa/Algiers"
   },
-  "versionId": "00000000-system-health-0000-000000000001",
+  "versionId": "00000000-system-health-0000-000000000002",
   "meta": {
     "instanceId": "417ede3735a1a3ac213ca021cd26620099d309138c4710d0d002e06e112f89de"
   },
