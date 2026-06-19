@@ -16,7 +16,7 @@ unchanged until you re-import.
 | WU3 | F4,F5,F10 | a DB blip dropped a tick silently; identical states re-fired analysis/control every 5s; downstream failures vanished | telemetry INSERT retries + dead-letters; routing requires `duplicate==false`; commands coalesce on one id; new `00_error_handler` catches failed executions |
 | WU4 | F7 | **deferred** | n8n static data already persists across restarts in single-main mode; `agent_state` migration only needed if you move to queue mode (and needs a live test) |
 | WU5 | F8,F9,D4 | health panel had no data source; two dispatchers competed; autonomous actions never reached firmware | new `07_system_health` writes `system_health_history`; `AUTONOMOUS_ACTUATION_ENABLED` flag (off) can route through `pending_command`; `06` dispatch is now advisory-only |
-| WU6 | F6,F11,F12,F13 | "6h" scan ran hourly; telemetry grew forever; URLs hardcoded; a dead action item | scan runs 6h; migration 008 adds compression+retention; URLs use `N8N_INTERNAL_URL`; dead action removed |
+| WU6 | F6,F11,F12,F13 | "6h" scan ran hourly; telemetry grew forever; URLs hardcoded; a dead action item | scan runs 6h; migration 008 installs `prune_telemetry_raw()` retention; URLs use `N8N_INTERNAL_URL`; dead action removed |
 
 ---
 
@@ -84,8 +84,10 @@ curl -s 'http://localhost:3000/api/agent/activity?kind=GATE&limit=5' | jq '.data
 curl -s 'http://localhost:3000/api/history/system-health?limit=6' | jq '.data[] | {component,status,latency_ms}'
 # expect rows for ditto / postgres / n8n within ~1 minute
 
-# WU6 — retention/compression policies registered
-docker compose exec -T postgres psql -U admin -d smart_building -c "SELECT proc_name, config FROM timescaledb_information.jobs WHERE hypertable_name='telemetry_raw';"
+# WU6 — retention helper installed (telemetry_raw is a plain table, see note below)
+docker compose exec -T postgres psql -U admin -d smart_building -c "SELECT proname FROM pg_proc WHERE proname='prune_telemetry_raw';"
+# run retention on demand (deletes rows older than N days, returns count):
+docker compose exec -T postgres psql -U admin -d smart_building -c "SELECT prune_telemetry_raw(90);"
 ```
 
 ---
@@ -98,3 +100,12 @@ docker compose exec -T postgres psql -U admin -d smart_building -c "SELECT proc_
   already uses this path). Default off = twin-state writes only, exactly as before.
 - **WU4 (durable agent state)** is intentionally not done — only needed if you switch n8n to
   queue mode; revisit with the stack up so it can be tested on the live ingestion path.
+- **Pre-existing infra finding (not caused by these upgrades):** `telemetry_raw` is a plain
+  Postgres table, not a TimescaleDB hypertable, and `hourly_risk`/`hourly_energy` are plain views,
+  not continuous aggregates — i.e. `001_timescaledb.sql` never fully took on this data volume.
+  It can't trivially become a hypertable because the `event_id` primary key + `ON CONFLICT
+  (event_id)` dedup is incompatible with TimescaleDB's rule that unique keys include the `time`
+  partition column. Hence retention here is the plain-table `prune_telemetry_raw()` function.
+  Converting to a real hypertable (for native compression + continuous aggregates, nice for the
+  "enterprise IoT / TimescaleDB" thesis story) is a separate schema change: composite key
+  `(event_id, time)` + adjust the ingestion upsert. Ask if you want that done and tested.
