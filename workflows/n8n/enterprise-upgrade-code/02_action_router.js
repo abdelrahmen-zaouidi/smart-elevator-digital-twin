@@ -46,10 +46,6 @@ if (flags.some((flag) => [
   pushAction('maintenance', 'CREATE_WORK_ORDER', analysis.severity === 'CRITICAL' ? 'CRITICAL' : 'HIGH', flags);
 }
 
-if (analysis.severity !== 'OK') {
-  pushAction('notification', 'NOTIFY_OPERATOR', analysis.severity === 'CRITICAL' ? 'CRITICAL' : 'MEDIUM', flags);
-}
-
 if (actions.length === 0) {
   return [{
     json: {

@@ -116,7 +116,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://n8n:5678/webhook/analysis-agent",
+        "url": "={{ ($env.N8N_INTERNAL_URL || 'http://n8n:5678') }}/webhook/analysis-agent",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($('Dedupe & Update Timeline').item.json) }}",
@@ -148,7 +148,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://n8n:5678/webhook/audit-agent",
+        "url": "={{ ($env.N8N_INTERNAL_URL || 'http://n8n:5678') }}/webhook/audit-agent",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify({ agent: '01_ingestion_surveillance_agent', event_type: $('Dedupe & Update Timeline').item.json.event_type, thing_id: $('Dedupe & Update Timeline').item.json.thing_id, correlation_id: $('Dedupe & Update Timeline').item.json.correlation_id, risk_score: $('Dedupe & Update Timeline').item.json.risk_score || 0, system_mode: $('Dedupe & Update Timeline').item.json.system_mode, status: 'SUCCESS', details: $('Dedupe & Update Timeline').item.json, timestamp: $('Dedupe & Update Timeline').item.json.timestamp }) }}",
@@ -232,7 +232,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://n8n:5678/webhook/audit-agent",
+        "url": "={{ ($env.N8N_INTERNAL_URL || 'http://n8n:5678') }}/webhook/audit-agent",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ JSON.stringify($json) }}",
