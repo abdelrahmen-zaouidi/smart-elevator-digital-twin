@@ -79,7 +79,11 @@
           "id": "Y3xIBg0WwpRKadx2",
           "name": "Postgres account"
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 1000,
+      "onError": "continueErrorOutput"
     },
     {
       "parameters": {
@@ -90,8 +94,15 @@
               "operation": "notEqual",
               "value2": "TELEMETRY_UPDATE"
             }
+          ],
+          "boolean": [
+            {
+              "value1": "={{ $('Dedupe & Update Timeline').item.json.duplicate }}",
+              "value2": false
+            }
           ]
-        }
+        },
+        "combineOperation": "all"
       },
       "id": "5b518164-c99d-4b1b-9e89-f979403d34b8",
       "name": "Route: Significant Event?",
@@ -303,6 +314,13 @@
           },
           {
             "node": "Queue Audit Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Dead-Letter Ingestion Failure",
             "type": "main",
             "index": 0
           }

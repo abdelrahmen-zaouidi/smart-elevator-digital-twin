@@ -45,7 +45,12 @@ const providedSource = String(action.source || 'n8n').toLowerCase();
 const reasonInput = Array.isArray(action.reason) ? action.reason
                   : (action.reason ? [action.reason] : []);
 const reason = reasonInput.map((r) => String(r).trim()).filter(Boolean);
-const commandId = action.command_id || `CMD-${thingId.replace(/[^a-zA-Z0-9]/g, '-')}-${Date.now().toString(36).toUpperCase()}`;
+// Coalesce repeated identical autonomous commands within a short window onto a
+// single command_id, so a sustained condition UPDATEs one control_command_log
+// row (via ON CONFLICT) instead of inserting a new row + Ditto write every tick.
+const coalesceSeconds = Number($env.COMMAND_COALESCE_SECONDS ?? 30);
+const coalesceBucket = coalesceSeconds > 0 ? Math.floor(nowMs / (coalesceSeconds * 1000)) : nowMs;
+const commandId = action.command_id || `CMD-${thingId.replace(/[^a-zA-Z0-9]/g, '-')}-${(rawCommand || 'CMD').replace(/[^a-zA-Z0-9]/g, '-')}-${coalesceBucket}`;
 const providedCorrelationId = action.correlation_id || input.correlation_id;
 // Always supply a correlation_id so control_command_log (NOT NULL) accepts the row,
 // even when an autonomous source agent forgot to attach one. The MISSING_CORRELATION_ID
