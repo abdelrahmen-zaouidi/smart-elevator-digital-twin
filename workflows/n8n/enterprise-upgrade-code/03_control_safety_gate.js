@@ -270,6 +270,32 @@ if (rejectionReasons.length === 0 && canonical) {
   }
 }
 
+// F9: optional autonomous actuation. When AUTONOMOUS_ACTUATION_ENABLED=true, also
+// publish a durable command intent that the ditto-bridge fans out to firmware over
+// MQTT (mirrors the dashboard /api/commands pending_command pattern). Default OFF —
+// the twin-state writes above remain the only effect, so this is opt-in.
+const DEVICE_ACTIONS = new Set([
+  'MOVE_TO_FLOOR', 'OPEN_DOOR', 'CLOSE_DOOR', 'EMERGENCY_STOP', 'RESET_EMERGENCY',
+  'LOCKDOWN', 'RELEASE_LOCKDOWN', 'SET_MAINTENANCE_MODE', 'FIRE_RECALL_TO_GROUND',
+]);
+const actuationEnabled = String($env.AUTONOMOUS_ACTUATION_ENABLED ?? 'false').toLowerCase() === 'true';
+if (rejectionReasons.length === 0 && canonical && actuationEnabled && DEVICE_ACTIONS.has(canonical)) {
+  const pendingCommand = {
+    command_id: commandId,
+    correlation_id: correlationId,
+    command: canonical,
+    thing_id: thingId,
+    source: providedSource,
+    source_agent: sourceAgent,
+    requested_at: action.issued_at || now,
+    queued_at: now,
+    status: 'PENDING',
+    reason: reason.join('; '),
+  };
+  if (canonical === 'MOVE_TO_FLOOR') pendingCommand.target_floor = Number(action.target_floor);
+  writes.push({ path: 'features/control/properties/pending_command', value: pendingCommand });
+}
+
 const status = rejectionReasons.length > 0 ? 'REJECTED' : 'VALIDATED';
 
 return [{

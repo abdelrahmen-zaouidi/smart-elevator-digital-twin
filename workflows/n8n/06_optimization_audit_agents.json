@@ -103,10 +103,10 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://n8n:5678/webhook/control-agent",
+        "url": "http://n8n:5678/webhook/audit-agent",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify($json) }}",
+        "jsonBody": "={{ JSON.stringify({ agent: '06_optimization_audit_agents', event_type: 'PREDICTIVE_DISPATCH_SUGGESTION', status: 'SUGGESTED', thing_id: $json.thing_id, action: 'REPOSITION', trigger: (($json.triggered_action && $json.triggered_action.reason) || []).join(','), risk_score: ($json.dispatch_analysis && $json.dispatch_analysis.risk_score) || 0, details: { suggestion: $json.triggered_action || {}, analysis: $json.dispatch_analysis || {} }, timestamp: $now.toISO() }) }}",
         "options": {
           "timeout": 5000
         },
@@ -121,7 +121,7 @@
         }
       },
       "id": "2e5f4c3f-89f3-4e90-bb09-b482f34ed3b9",
-      "name": "Queue Predictive Dispatch",
+      "name": "Record Dispatch Suggestion",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.1,
       "position": [
@@ -515,7 +515,7 @@
       "main": [
         [
           {
-            "node": "Queue Predictive Dispatch",
+            "node": "Record Dispatch Suggestion",
             "type": "main",
             "index": 0
           }

@@ -1,0 +1,135 @@
+{
+  "name": "07_system_health",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "minutes",
+              "minutesInterval": 1
+            }
+          ]
+        }
+      },
+      "id": "f7000001-0001-4a00-9000-000000000001",
+      "name": "Schedule: Health Check Every 1m",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT 1 AS ok;",
+        "options": {}
+      },
+      "id": "f7000002-0002-4a00-9000-000000000002",
+      "name": "Probe Postgres",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        224,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "postgres": {
+          "id": "Y3xIBg0WwpRKadx2",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const base = ($env.DITTO_BASE_URL || 'http://docker-nginx-1').replace(/\\/$/, '');\nconst thingId = $env.PRIMARY_THING_ID || 'building:floor1:elevator';\nconst user = $env.DITTO_USERNAME || 'ditto';\nconst pass = $env.DITTO_PASSWORD || 'ditto';\nconst auth = 'Basic ' + Buffer.from(`${user}:${pass}`).toString('base64');\nconst now = new Date().toISOString();\n\nlet ditto = { component: 'ditto', status: 'DOWN', latency_ms: 0, error_message: '' };\nconst t0 = Date.now();\ntry {\n  await $http.request({\n    method: 'GET',\n    url: `${base}/api/2/things/${thingId}`,\n    headers: { accept: 'application/json', Authorization: auth },\n    timeout: 4000\n  });\n  ditto.status = 'UP';\n} catch (e) {\n  ditto.error_message = String((e && e.message) || 'ditto_unreachable').slice(0, 200);\n}\nditto.latency_ms = Date.now() - t0;\n\n// Postgres reachability is proven by the upstream Probe Postgres node succeeding;\n// n8n is UP because this Code node is executing.\nreturn [\n  { json: { thing_id: thingId, ...ditto, checked_at: now } },\n  { json: { thing_id: thingId, component: 'postgres', status: 'UP', latency_ms: 0, error_message: '', checked_at: now } },\n  { json: { thing_id: thingId, component: 'n8n', status: 'UP', latency_ms: 0, error_message: '', checked_at: now } }\n];\n"
+      },
+      "id": "f7000003-0003-4a00-9000-000000000003",
+      "name": "Aggregate Health",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO system_health_history (thing_id, component, status, latency_ms, error_message, checked_at) VALUES ($1, $2, $3, $4::integer, $5, COALESCE($6::timestamptz, NOW()));",
+        "options": {
+          "queryReplacement": "={{ [$json.thing_id, $json.component, $json.status, Number($json.latency_ms || 0), $json.error_message || null, $json.checked_at] }}"
+        }
+      },
+      "id": "f7000004-0004-4a00-9000-000000000004",
+      "name": "Insert Health Rows",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        672,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 2,
+      "waitBetweenTries": 1000,
+      "credentials": {
+        "postgres": {
+          "id": "Y3xIBg0WwpRKadx2",
+          "name": "Postgres account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule: Health Check Every 1m": {
+      "main": [
+        [
+          {
+            "node": "Probe Postgres",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Probe Postgres": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Health",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Health": {
+      "main": [
+        [
+          {
+            "node": "Insert Health Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "Africa/Algiers"
+  },
+  "versionId": "00000000-system-health-0000-000000000001",
+  "meta": {
+    "instanceId": "417ede3735a1a3ac213ca021cd26620099d309138c4710d0d002e06e112f89de"
+  },
+  "id": "SYSTEMHEALTH0001",
+  "tags": []
+}
