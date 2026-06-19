@@ -111,6 +111,15 @@
         "jsonBody": "={{ JSON.stringify($('Dedupe & Update Timeline').item.json) }}",
         "options": {
           "timeout": 5000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-webhook-secret",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+            }
+          ]
         }
       },
       "id": "0ec3796e-3100-4316-a945-be1dfb718c90",
@@ -134,6 +143,15 @@
         "jsonBody": "={{ JSON.stringify({ agent: '01_ingestion_surveillance_agent', event_type: $('Dedupe & Update Timeline').item.json.event_type, thing_id: $('Dedupe & Update Timeline').item.json.thing_id, correlation_id: $('Dedupe & Update Timeline').item.json.correlation_id, risk_score: $('Dedupe & Update Timeline').item.json.risk_score || 0, system_mode: $('Dedupe & Update Timeline').item.json.system_mode, status: 'SUCCESS', details: $('Dedupe & Update Timeline').item.json, timestamp: $('Dedupe & Update Timeline').item.json.timestamp }) }}",
         "options": {
           "timeout": 5000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-webhook-secret",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+            }
+          ]
         }
       },
       "id": "68ab344d-7ce3-4eb8-9b2d-2382dc2774ce",
@@ -209,6 +227,15 @@
         "jsonBody": "={{ JSON.stringify($json) }}",
         "options": {
           "timeout": 5000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-webhook-secret",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+            }
+          ]
         }
       },
       "id": "27a679bc-d423-45e6-862e-b04b073507ec",

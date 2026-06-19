@@ -223,7 +223,14 @@ async function pingN8nAudit(decision, eventType) {
   try {
     const response = await fetch(N8N_AUDIT_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        // Shared secret enforced by the n8n webhooks' Header Auth credential.
+        // Omitted when unset so local dev without auth still works.
+        ...(process.env.N8N_WEBHOOK_SECRET
+          ? { "x-n8n-webhook-secret": process.env.N8N_WEBHOOK_SECRET }
+          : {}),
+      },
       body: JSON.stringify({
         agent: "dashboard_safety_gate",
         event_type: eventType,

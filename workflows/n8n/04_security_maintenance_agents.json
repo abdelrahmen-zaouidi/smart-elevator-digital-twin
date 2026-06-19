@@ -10,6 +10,15 @@
         "jsonBody": "={{ JSON.stringify({ thing_id: $('Predictive Maintenance Engine').item.json.work_order.thing_id, severity: 'WARNING', work_order: $('Predictive Maintenance Engine').item.json.work_order, event: $('Predictive Maintenance Engine').item.json, title: 'Predictive maintenance required', message: 'Priority ' + $('Predictive Maintenance Engine').item.json.work_order.priority + ' work order for ' + $('Predictive Maintenance Engine').item.json.work_order.thing_id }) }}",
         "options": {
           "timeout": 5000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-webhook-secret",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+            }
+          ]
         }
       },
       "id": "be368752-7857-419e-b480-deb2859e397d",
@@ -217,7 +226,8 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "maintenance-agent",
-        "options": {}
+        "options": {},
+        "authentication": "headerAuth"
       },
       "id": "96536039-c048-4a95-84e2-c190aab19b8d",
       "name": "Webhook: Maintenance Events",
@@ -227,7 +237,13 @@
         3456,
         1184
       ],
-      "webhookId": "maintenance-agent"
+      "webhookId": "maintenance-agent",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "__SET_WEBHOOK_SECRET_CRED__",
+          "name": "n8n Webhook Secret"
+        }
+      }
     },
     {
       "parameters": {
@@ -238,6 +254,15 @@
         "jsonBody": "={{ JSON.stringify({ thing_id: $json.thing_id, severity: $json.security_analysis.severity, event: $json, title: 'Security escalation', message: `Security state ${$json.security_analysis.state} for ${$json.thing_id}` }) }}",
         "options": {
           "timeout": 5000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-webhook-secret",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+            }
+          ]
         }
       },
       "id": "76a33979-27ae-4e60-93bd-e93a28ebea51",
@@ -295,6 +320,15 @@
         "jsonBody": "={{ JSON.stringify($json) }}",
         "options": {
           "timeout": 5000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-webhook-secret",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+            }
+          ]
         }
       },
       "id": "c0aa9554-6f78-431f-8305-c7bacd98286f",
@@ -377,7 +411,8 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "security-agent",
-        "options": {}
+        "options": {},
+        "authentication": "headerAuth"
       },
       "id": "4d4b3f5e-92c6-44d9-bc37-2075a8394900",
       "name": "Webhook: Security Events",
@@ -387,7 +422,13 @@
         3008,
         576
       ],
-      "webhookId": "security-agent"
+      "webhookId": "security-agent",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "__SET_WEBHOOK_SECRET_CRED__",
+          "name": "n8n Webhook Secret"
+        }
+      }
     },
     {
       "parameters": {

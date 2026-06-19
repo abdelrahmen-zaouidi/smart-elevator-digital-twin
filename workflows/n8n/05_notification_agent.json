@@ -5,7 +5,8 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "notification-agent",
-        "options": {}
+        "options": {},
+        "authentication": "headerAuth"
       },
       "id": "d5ea752d-bc20-4471-8a8f-136db96065c8",
       "name": "Webhook: Notification Request",
@@ -15,7 +16,13 @@
         2496,
         624
       ],
-      "webhookId": "notification-agent"
+      "webhookId": "notification-agent",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "__SET_WEBHOOK_SECRET_CRED__",
+          "name": "n8n Webhook Secret"
+        }
+      }
     },
     {
       "parameters": {

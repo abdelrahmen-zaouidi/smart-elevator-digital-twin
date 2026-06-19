@@ -109,6 +109,15 @@
         "jsonBody": "={{ JSON.stringify($json) }}",
         "options": {
           "timeout": 5000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-webhook-secret",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+            }
+          ]
         }
       },
       "id": "2e5f4c3f-89f3-4e90-bb09-b482f34ed3b9",
@@ -231,6 +240,15 @@
         "jsonBody": "={{ JSON.stringify({ thing_id: $json.thing_id, payload: { energy: $json.optimization || {} }, risk_analysis: { severity: 'WARNING', flags: ($json.optimization || {}).recommendations || [], risk_score: 45 } }) }}",
         "options": {
           "timeout": 5000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-webhook-secret",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+            }
+          ]
         }
       },
       "id": "fccbbc2f-1977-4af6-b3e9-16493ed33c89",
@@ -254,6 +272,15 @@
         "jsonBody": "={{ JSON.stringify({ thing_id: $json.thing_id, severity: 'WARNING', title: 'Energy optimization anomaly', message: 'Detected ' + (($json.optimization || {}).recommendations || []).join(', ') + ' on ' + $json.thing_id, event: $json, risk_analysis: { severity: 'WARNING', risk_score: 45, flags: ($json.optimization || {}).recommendations || [] } }) }}",
         "options": {
           "timeout": 5000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-webhook-secret",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+            }
+          ]
         }
       },
       "id": "19e72fa4-3cf7-4cd3-b3cd-f8590c193711",
@@ -341,7 +368,8 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "audit-agent",
-        "options": {}
+        "options": {},
+        "authentication": "headerAuth"
       },
       "id": "6ca8fe58-31c9-47fe-8666-0338160aa7c9",
       "name": "Webhook: Audit Event",
@@ -351,7 +379,13 @@
         3648,
         2448
       ],
-      "webhookId": "audit-agent"
+      "webhookId": "audit-agent",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "__SET_WEBHOOK_SECRET_CRED__",
+          "name": "n8n Webhook Secret"
+        }
+      }
     },
     {
       "parameters": {

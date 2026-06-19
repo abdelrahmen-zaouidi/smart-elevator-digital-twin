@@ -5,7 +5,8 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "analysis-agent",
-        "options": {}
+        "options": {},
+        "authentication": "headerAuth"
       },
       "id": "317fd4dc-2d44-4c6e-b1f2-d9b7cf2bb54c",
       "name": "Webhook: Receive Canonical Event",
@@ -15,7 +16,13 @@
         -416,
         464
       ],
-      "webhookId": "analysis-agent"
+      "webhookId": "analysis-agent",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "__SET_WEBHOOK_SECRET_CRED__",
+          "name": "n8n Webhook Secret"
+        }
+      }
     },
     {
       "parameters": {
@@ -169,6 +176,15 @@
         "jsonBody": "={{ JSON.stringify({ thing_id: $json.thing_id, severity: $json.risk_analysis.severity, event: $json, risk_analysis: $json.risk_analysis, llm_analysis: $json.llm_analysis }) }}",
         "options": {
           "timeout": 5000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-webhook-secret",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+            }
+          ]
         }
       },
       "id": "ac6ccbd2-b569-41b7-a304-176b3c7353f1",
@@ -272,6 +288,15 @@
         "jsonBody": "={{ JSON.stringify($json) }}",
         "options": {
           "timeout": 5000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-webhook-secret",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+            }
+          ]
         }
       },
       "id": "71e69aa1-c3fc-47ba-b87f-97a68646bff5",
@@ -295,6 +320,15 @@
         "jsonBody": "={{ JSON.stringify($json) }}",
         "options": {
           "timeout": 5000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-webhook-secret",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+            }
+          ]
         }
       },
       "id": "9548422a-0cb1-42c0-a799-ca2b72154add",
@@ -318,6 +352,15 @@
         "jsonBody": "={{ JSON.stringify($json) }}",
         "options": {
           "timeout": 5000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-n8n-webhook-secret",
+              "value": "={{ $env.N8N_WEBHOOK_SECRET }}"
+            }
+          ]
         }
       },
       "id": "1d71da4d-f9af-48b9-8bda-ad79c4f46917",
