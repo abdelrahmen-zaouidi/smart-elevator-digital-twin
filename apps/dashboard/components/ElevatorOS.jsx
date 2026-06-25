@@ -87,6 +87,7 @@ import {
   MiniIconButton, ToggleSwitch, SettingsSection, ConfirmModal,
 } from "../src/components/common";
 import ElevatorShaft from "../src/components/twin/ElevatorShaft";
+import DigitalTwinScene from "../src/components/twin/DigitalTwinScene";
 
 
 const PAGES = [
@@ -2479,8 +2480,8 @@ function PageTwin() {
     <div className="eos-page-stack">
       <Card title="Digital Twin Operational Picture" accent={warnings.length > 0 ? T.red : T.cyan}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 18, alignItems: "center" }}>
-          <div style={{ display: "flex", justifyContent: "center" }}>
-            <ElevatorShaft state={state} compact />
+          <div style={{ gridColumn: "1 / -1" }}>
+            <DigitalTwinScene state={state} sendFloor={sendFloor} movementBlocked={movementBlocked} height={400} />
           </div>
           <div className="eos-status-list">
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
