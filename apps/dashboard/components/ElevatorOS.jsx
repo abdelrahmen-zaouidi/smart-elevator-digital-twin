@@ -59,99 +59,35 @@ import {
 } from "lucide-react";
 import { env } from "../src/config/env";
 import { useDitto } from "../src/hooks/useDitto";
-import { submitCommand } from "../src/services/commandClient";
+import { reconcileCommandResult, submitCommand } from "../src/services/commandClient";
+import {
+  activeCommandFromThing,
+  commandOutcomeMessage,
+  commandResultForId,
+  normalizeCommandStatus,
+} from "@smart-elevator/shared/commandLifecycle.js";
 import { useAccessControl } from "../src/hooks/useAccessControl";
 import { recordAccessEvent } from "../src/services/accessControlClient";
 import { createSpeedEstimator } from "../src/lib/speedEstimator";
 import { ROLES, normalizeUid } from "../src/lib/accessControl";
 import CommandSafetyGatePanel from "./scada/CommandSafetyGatePanel";
 import DispatchPolicyPanel from "./scada/DispatchPolicyPanel";
+import AgentActivityPanel from "./scada/AgentActivityPanel";
+import { T, applyThemeTokens } from "../src/theme/tokens";
+import {
+  NUM_FLOORS, FLOOR_LABELS, FLOOR_H, MAX_LOAD, MOTOR_LIFE_H,
+  HISTORY_LIMIT, TIMELINE_LIMIT,
+  riskColor, riskLabel, healthColor, fmtTime, relTime,
+  FAN_THERMAL, decideFanState,
+} from "../src/lib/twinConstants";
+import {
+  Card, KpiTile, StatusPill, SevBadge, EmptyState, FieldTile,
+  ConnectionIndicator, CmdBtn, RiskGauge, TelemetryChart, HealthBar,
+  FanControlCard, ToastStack, GlobalAlertBanner, TableShell,
+  MiniIconButton, ToggleSwitch, SettingsSection, ConfirmModal,
+} from "../src/components/common";
+import ElevatorShaft from "../src/components/twin/ElevatorShaft";
 
-// Design tokens
-const T = {
-  bg:        "#050a12",
-  surface:   "#ffffff",   // Pure white - panel background
-  surfaceHi: "#f0f4f9",   // Light blue-gray - elevated panel
-  border:    "#d1dce6",   // Soft gray border
-  borderHi:  "#b8c5d6",   // Darker border for hover
-  text:      "#0f1419",   // Dark text - primary
-  textSub:   "#4a5568",   // Medium gray - secondary
-  textMute:  "#8a92a2",   // Light gray - muted
-  green:     "#059669",   // Emerald for success
-  greenDim:  "#d1fae5",   // Light emerald background
-  yellow:    "#d97706",   // Amber for warning
-  yellowDim: "#fef3c7",   // Light amber background
-  red:       "#dc2626",   // Red for critical
-  redDim:    "#fee2e2",   // Light red background
-  blue:      "#2563eb",   // Blue for info
-  blueDim:   "#dbeafe",   // Light blue background
-  cyan:      "#0891b2",   // Cyan accent
-  purple:    "#7c3aed",   // Purple accent
-};
-
-// Constants
-Object.assign(T, {
-  bg: "#050a12",
-  bg2: "#08111f",
-  surface: "#0d1626",
-  surfaceHi: "#111f33",
-  surfaceLo: "#07101d",
-  border: "#1f334a",
-  borderHi: "#2f526f",
-  text: "#e6edf7",
-  textSub: "#aab7c7",
-  textMute: "#65758a",
-  green: "#34d399",
-  greenDim: "rgba(16, 185, 129, 0.13)",
-  yellow: "#f59e0b",
-  yellowDim: "rgba(245, 158, 11, 0.14)",
-  red: "#f87171",
-  redDim: "rgba(248, 113, 113, 0.15)",
-  blue: "#60a5fa",
-  blueDim: "rgba(96, 165, 250, 0.14)",
-  cyan: "#22d3ee",
-  cyanDim: "rgba(34, 211, 238, 0.13)",
-  purple: "#c084fc",
-  purpleDim: "rgba(192, 132, 252, 0.14)",
-  orange: "#fb923c",
-});
-
-const DARK_TOKENS = { ...T };
-const LIGHT_TOKENS = {
-  bg: "#f5f8fb",
-  bg2: "#eaf1f8",
-  surface: "#ffffff",
-  surfaceHi: "#eef4fa",
-  surfaceLo: "#f8fbfe",
-  border: "#d6e1ec",
-  borderHi: "#b9c8d8",
-  text: "#0f172a",
-  textSub: "#334155",
-  textMute: "#64748b",
-  green: "#047857",
-  greenDim: "rgba(4, 120, 87, 0.10)",
-  yellow: "#b45309",
-  yellowDim: "rgba(180, 83, 9, 0.12)",
-  red: "#b91c1c",
-  redDim: "rgba(185, 28, 28, 0.10)",
-  blue: "#1d4ed8",
-  blueDim: "rgba(29, 78, 216, 0.10)",
-  cyan: "#0e7490",
-  cyanDim: "rgba(14, 116, 144, 0.10)",
-  purple: "#7c3aed",
-  purpleDim: "rgba(124, 58, 237, 0.10)",
-  orange: "#c2410c",
-};
-
-function applyThemeTokens(theme) {
-  Object.assign(T, theme === "light" ? LIGHT_TOKENS : DARK_TOKENS);
-}
-
-const NUM_FLOORS    = 4;
-const FLOOR_LABELS  = ["0", "1", "2", "3"];
-const FLOOR_H       = 84;
-const MAX_LOAD      = 800;
-const MOTOR_LIFE_H  = 10000;
 
 const PAGES = [
   { id: "twin", label: "Digital Twin", icon: LayoutDashboard, short: "DT", group: "Core" },
@@ -250,7 +186,7 @@ const INIT_STATE = {
     security: { properties: { audio_distress_active: false, unauthorized_access_attempts: 0, rfid_last_card: "", rfid_access_granted: true, alert_level: "NORMAL" }},
     fan: { properties: { state: "OFF", mode: "AUTO", reason: "IDLE", duty_cycle_pct: 0, runtime_today_min: 0, last_changed_at: null }},
     request_queue: { properties: { pending_count: 0, dispatch_direction: "IDLE", current_floor: 0, target_floor: 0, cabin: [false, false, false, false], hall_up: [false, false, false, false], hall_down: [false, false, false, false], priority_active: false, priority_floor: -1, priority_source: "NONE", updated_ms: 0 }},
-    control: { properties: { pending_command: null, last_forwarded_command: null }},
+    control: { properties: { pending_command: null, last_forwarded_command: null, last_command_result: null, last_ignored_command_result: null }},
     microcontroller: { properties: { board: "ESP32-S3", connected: false, status: "OFFLINE", source: "mqtt_status", transport: "MQTT", mqtt_id: env.MQTT_ID, mqtt_topic: env.MQTT_STATUS_TOPIC, telemetry_topic: env.MQTT_TELEMETRY_TOPIC, last_seen_at: null, last_telemetry_at: null, last_status_at: null, last_disconnected_at: null }},
     incident_log: { properties: { entries: [], open_incidents: 0 }},
     energy:   { properties: { kwh_today: 0, kwh_month: 0, kwh_baseline: 0, co2_kg: 0, regen_kwh: 0 }},
@@ -323,73 +259,6 @@ function applyScenario(state, key) {
   return addIncident(fn(state), inc[0], inc[1]);
 }
 
-const riskColor  = s  => s >= 76 ? T.red    : s >= 41 ? T.yellow : T.green;
-const riskLabel  = s  => s >= 76 ? "CRITICAL" : s >= 41 ? "WARNING" : "NOMINAL";
-const healthColor = h => h >= 80 ? T.green   : h >= 50 ? T.yellow  : T.red;
-const fmtTime    = ts => { try { return new Date(ts).toLocaleTimeString("en-GB", { hour12: false }); } catch { return ""; }};
-const relTime    = ts => {
-  const d = Math.floor((Date.now() - new Date(ts)) / 1000);
-  if (d < 5)   return "just now";
-  if (d < 60)  return `${d}s ago`;
-  if (d < 3600) return `${Math.floor(d/60)}m ago`;
-  return `${Math.floor(d/3600)}h ago`;
-};
-
-const HISTORY_LIMIT = 60;
-const TIMELINE_LIMIT = 200;
-
-// Cooling automation
-// Drives the electronics-bay fan that cools the power supply, drivers and
-// motor. Hysteresis on motor temperature avoids relay chatter; an activity
-// preempt keeps the fan running during travel; a critical safety override
-// forces the fan ON regardless of operator mode when the motor approaches
-// thermal limit.
-const FAN_THERMAL = {
-  ON_MOTOR_C: 55,        // turn fan ON when motor crosses this
-  OFF_MOTOR_C: 45,       // turn fan OFF only when motor drops below this
-  ON_CABIN_C: 30,        // also turn ON if cabin air is uncomfortable
-  CRITICAL_MOTOR_C: 75,  // force-ON override, regardless of operator mode
-  POST_RUN_S: 8,         // keep blowing for this many seconds after motion stops
-};
-
-function decideFanState({ motorTempC, cabinTempC, moving, mode, currentState, lastActivityMs, nowMs = Date.now() }) {
-  const m = Number(motorTempC) || 0;
-  const c = Number(cabinTempC) || 0;
-  const prev = String(currentState || "OFF").toUpperCase();
-  const op = String(mode || "AUTO").toUpperCase();
-
-  // Critical override — never let the operator switch the fan off while the
-  // motor is approaching thermal limit.
-  if (m >= FAN_THERMAL.CRITICAL_MOTOR_C) {
-    return { state: "ON", reason: "MOTOR_CRITICAL_TEMP", override: true };
-  }
-
-  if (op === "MANUAL") {
-    return { state: prev, reason: "MANUAL_OVERRIDE", override: false };
-  }
-
-  // AUTO mode -----------------------------------------------------------------
-  if (moving) return { state: "ON", reason: "MOTOR_ACTIVE", override: false };
-
-  if (lastActivityMs != null && nowMs - lastActivityMs < FAN_THERMAL.POST_RUN_S * 1000) {
-    return { state: "ON", reason: "POST_RUN_PURGE", override: false };
-  }
-
-  if (m >= FAN_THERMAL.ON_MOTOR_C) {
-    return { state: "ON", reason: "MOTOR_TEMP_HIGH", override: false };
-  }
-
-  if (c >= FAN_THERMAL.ON_CABIN_C) {
-    return { state: "ON", reason: "CABIN_TEMP_HIGH", override: false };
-  }
-
-  // Hysteresis: stay ON until motor drops below OFF threshold.
-  if (prev === "ON" && m > FAN_THERMAL.OFF_MOTOR_C) {
-    return { state: "ON", reason: "HYSTERESIS_HOLD", override: false };
-  }
-
-  return { state: "OFF", reason: "IDLE", override: false };
-}
 
 const isPlainObject = value => value != null && typeof value === "object" && !Array.isArray(value);
 const clamp = (value, min, max, fallback = min) => {
@@ -1323,7 +1192,7 @@ function commandDecisionDetail(decision, fallback = "Command rejected by safety 
 }
 
 function commandResultSeverity(result) {
-  if (result === "FAILED") return "CRITICAL";
+  if (result === "FAILED" || result === "TIMED_OUT") return "CRITICAL";
   if (result === "IGNORED" || result === "REJECTED") return "WARNING";
   return "INFO";
 }
@@ -1340,6 +1209,9 @@ function useDigitalTwinEngine() {
   const [toasts, setToasts] = useState([]);
   const [timeline, setTimeline] = useState([]);
   const [stateDiff, setStateDiff] = useState({});
+  const [activeCommand, setActiveCommand] = useState(null);
+  const activeCommandRef = useRef(null);
+  const commandWaitersRef = useRef(new Map());
   // Deterministic, movement-based speed (independent of the firmware's constant
   // cruise approximation). Derived from observed floor transitions + timestamps.
   const [speedEstH, setSpeedEstH] = useState([]);
@@ -1445,6 +1317,19 @@ function useDigitalTwinEngine() {
     detail = "",
     localUpdate,
   }) => {
+    if (activeCommandRef.current) {
+      const active = activeCommandRef.current;
+      const duplicateDetail = `Command ${active.command_id} (${active.command || "UNKNOWN"}) is still ${active.status}`;
+      logCmd(cmd, "IGNORED", duplicateDetail);
+      toast("WARNING", `${cmd} ignored: ${duplicateDetail}`);
+      return {
+        ok: false,
+        accepted: false,
+        decision: "REJECTED",
+        rejection_reasons: [duplicateDetail],
+      };
+    }
+
     try {
       const decision = await action();
 
@@ -1474,6 +1359,53 @@ function useDigitalTwinEngine() {
           toast("CRITICAL", `${cmd} failed: ${failureDetail}`);
           return decision;
         }
+
+        if (deviceStatus === "QUEUED_VIA_DITTO_BRIDGE" && decision.command_id) {
+          const pending = {
+            command_id: decision.command_id,
+            correlation_id: decision.correlation_id,
+            command: decision.command,
+            status: "PENDING",
+          };
+          activeCommandRef.current = pending;
+          setActiveCommand(pending);
+          logCmd(cmd, "QUEUED", `Command ${decision.command_id} accepted by safety gate`);
+
+          const immediate = commandResultForId(sRef.current, decision.command_id);
+          const terminalResult = immediate || await new Promise((resolve) => {
+            const timeoutId = window.setTimeout(() => {
+              commandWaitersRef.current.delete(decision.command_id);
+              resolve({
+                command_id: decision.command_id,
+                correlation_id: decision.correlation_id,
+                command: decision.command,
+                status: "TIMED_OUT",
+                reason: `No terminal device acknowledgement within ${env.COMMAND_TIMEOUT_MS} ms`,
+              });
+            }, env.COMMAND_TIMEOUT_MS);
+
+            commandWaitersRef.current.set(decision.command_id, {
+              resolve,
+              timeoutId,
+            });
+          });
+
+          const terminalStatus = normalizeCommandStatus(terminalResult.status);
+          const terminalDetail = commandOutcomeMessage(terminalResult);
+          activeCommandRef.current = null;
+          setActiveCommand(null);
+          void reconcileCommandResult(decision.command_id);
+
+          if (terminalStatus !== "COMPLETED") {
+            logCmd(cmd, terminalStatus, terminalDetail);
+            toast(terminalStatus === "REJECTED" ? "WARNING" : "CRITICAL", `${cmd} ${terminalStatus.toLowerCase()}: ${terminalDetail}`);
+            return { ...decision, device_result: terminalResult };
+          }
+
+          logCmd(cmd, "EXECUTED", terminalDetail || detail);
+          if (successMessage) toast(successSeverity, successMessage);
+          return { ...decision, device_result: terminalResult };
+        }
       }
 
       if (localUpdate) {
@@ -1495,7 +1427,25 @@ function useDigitalTwinEngine() {
   const handleDittoThingUpdate = useCallback((thing) => {
     if (!thing) return;
     commitState(thing, "DITTO");
+    const nextActive = activeCommandFromThing(thing);
+    activeCommandRef.current = nextActive;
+    setActiveCommand(nextActive);
+
+    for (const [commandId, waiter] of commandWaitersRef.current.entries()) {
+      const result = commandResultForId(thing, commandId);
+      if (!result) continue;
+      window.clearTimeout(waiter.timeoutId);
+      commandWaitersRef.current.delete(commandId);
+      waiter.resolve(result);
+    }
   }, [commitState]);
+
+  useEffect(() => () => {
+    for (const waiter of commandWaitersRef.current.values()) {
+      window.clearTimeout(waiter.timeoutId);
+    }
+    commandWaitersRef.current.clear();
+  }, []);
 
   const {
     isConnected: dittoConnected,
@@ -2136,6 +2086,7 @@ function useDigitalTwinEngine() {
 
   return {
     state, vibH, tmpH, ldH, speedH, riskH, enH, cmdLog, toasts, timeline, stateDiff, connected,
+    activeCommand, commandInFlight: Boolean(activeCommand),
     isSimulationMode, dittoConnected, dittoMode, dittoError,
     speedEstH, computedSpeedMs, lastTripSpeedMs,
     emergencyStop: emergencyStopCommand, lockdown: triggerLockdownCommand, maintenance: maintenanceCommand, reset: resetSystemCommand, sendFloor: moveToFloorCommand,
@@ -2151,582 +2102,9 @@ function useDigitalTwinEngine() {
 // Design system components
 
 /** Panel card with optional header accent */
-function Card({ title, accent, children, className = "", noPad = false }) {
-  return (
-    <div
-      className={`rounded-2xl flex flex-col overflow-hidden transition-all ${className}`}
-      style={{
-        background: `linear-gradient(180deg, ${T.surface} 0%, ${T.surfaceLo || T.surface} 100%)`,
-        border: `1px solid ${T.border}`,
-        boxShadow: "0 16px 36px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.03)",
-      }}
-    >
-      {title && (
-        <div
-          className="flex items-center justify-between gap-3 px-5 py-3"
-          style={{
-            borderBottom: `1px solid ${T.border}`,
-            borderLeft: accent ? `4px solid ${accent}` : "4px solid transparent",
-            background: accent ? `linear-gradient(90deg, ${accent}22, rgba(255,255,255,0.015))` : T.surface,
-            transition: "all 0.2s ease",
-          }}
-        >
-          <span className="text-xs font-semibold tracking-wide uppercase" style={{ color: accent || T.textSub, letterSpacing: "0.1em" }}>
-            {title}
-          </span>
-          <span style={{ width: 6, height: 6, borderRadius: 999, background: accent || T.border, boxShadow: accent ? `0 0 14px ${accent}` : undefined }} />
-        </div>
-      )}
-      <div className={`flex-1 ${noPad ? "" : "p-5"}`}>{children}</div>
-    </div>
-  );
-}
 
-/** KPI metric tile */
-function KpiTile({ label, value, unit, color, sub }) {
-  return (
-    <div
-      className="rounded-2xl p-4 flex flex-col gap-2 transition-all"
-      style={{
-        background: `linear-gradient(160deg, ${T.surfaceHi}, ${T.surface})`,
-        border: `1px solid ${T.border}`,
-        boxShadow: "0 14px 28px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.03)",
-      }}
-    >
-      <div className="text-xs font-semibold tracking-wide uppercase" style={{ color: T.textMute, letterSpacing: "0.08em" }}>
-        {label}
-      </div>
-      <div className="flex items-baseline gap-2">
-        <span className="text-2xl font-bold font-mono tabular-nums" style={{ color: color || T.text }}>
-          {value}
-        </span>
-        {unit && <span className="text-xs font-mono" style={{ color: T.textMute }}>
-          {unit}
-        </span>}
-      </div>
-      {sub && <div className="text-xs font-mono" style={{ color: T.textMute }}>
-        {sub}
-      </div>}
-    </div>
-  );
-}
 
-/** Pill badge for system modes and statuses */
-function StatusPill({ label, color, pulse = false }) {
-  return (
-    <span
-      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold tracking-wide uppercase transition-all"
-      style={{
-        color,
-        background: color === T.green ? T.greenDim : color === T.yellow ? T.yellowDim : color === T.red ? T.redDim : T.blueDim,
-        border: `1px solid ${color}40`,
-        boxShadow: pulse ? `0 0 8px ${color}30` : undefined,
-      }}
-    >
-      <span
-        className="w-2 h-2 rounded-full inline-block"
-        style={{
-          background: color,
-          animation: pulse ? "pulse 2s ease-in-out infinite" : undefined,
-        }}
-      />
-      {label}
-    </span>
-  );
-}
 
-/** Severity badge */
-function SevBadge({ sev }) {
-  const cfg = { CRITICAL: T.red, WARNING: T.yellow, INFO: T.blue, NORMAL: T.green };
-  const c = cfg[sev] || T.textSub;
-  const bgCfg = { CRITICAL: T.redDim, WARNING: T.yellowDim, INFO: T.blueDim, NORMAL: T.greenDim };
-  const bg = bgCfg[sev] || T.surfaceHi;
-  return (
-    <span
-      className="px-2.5 py-1 rounded-md text-xs font-semibold tracking-wide uppercase"
-      style={{ color: c, background: bg, border: `1px solid ${c}30` }}
-    >
-      {sev}
-    </span>
-  );
-}
-
-/** Command button - enterprise style */
-function EmptyState({ title = "No data", detail = "Waiting for telemetry or operator action." }) {
-  return (
-    <div style={{
-      padding: "22px 16px",
-      borderRadius: 14,
-      border: `1px dashed ${T.borderHi}`,
-      background: "rgba(255,255,255,0.018)",
-      textAlign: "center",
-    }}>
-      <div style={{ color: T.textSub, fontSize: 12, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>{title}</div>
-      <div style={{ color: T.textMute, fontSize: 11, marginTop: 6 }}>{detail}</div>
-    </div>
-  );
-}
-
-function FieldTile({ label, value, color = T.textSub, sub }) {
-  return (
-    <div style={{ padding: "10px 12px", borderRadius: 12, background: T.surfaceHi, border: `1px solid ${T.border}` }}>
-      <div style={{ fontSize: 10, color: T.textMute, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{label}</div>
-      <div style={{ fontSize: 15, color, fontWeight: 800, fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace" }}>{value}</div>
-      {sub && <div style={{ color: T.textMute, fontSize: 10, marginTop: 3 }}>{sub}</div>}
-    </div>
-  );
-}
-
-function ConnectionIndicator({ label, active, detail }) {
-  const color = active ? T.green : T.red;
-  return (
-    <div style={{
-      display: "flex",
-      alignItems: "center",
-      gap: 8,
-      padding: "7px 10px",
-      borderRadius: 999,
-      border: `1px solid ${active ? "rgba(52,211,153,0.35)" : "rgba(248,113,113,0.35)"}`,
-      background: active ? T.greenDim : T.redDim,
-      color,
-      fontSize: 11,
-      fontWeight: 800,
-      letterSpacing: "0.06em",
-    }}>
-      <span style={{ width: 7, height: 7, borderRadius: 999, background: color, boxShadow: active ? `0 0 14px ${color}` : undefined }} />
-      <span>{label}</span>
-      {detail && <span style={{ color: T.textMute, fontWeight: 600, letterSpacing: 0 }}>{detail}</span>}
-    </div>
-  );
-}
-
-function CmdBtn({ label, icon, onClick, variant = "default", disabled = false, confirm = false, reason }) {
-  const [confirming, setConfirming] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const mountedRef = useRef(true);
-  useEffect(() => () => { mountedRef.current = false; }, []);
-
-  const styles = {
-    danger:   { bg: "#1c0a0a", border: "#7f1d1d", text: "#fca5a5", hover: "#2d0f0f" },
-    warning:  { bg: "#1c1200", border: "#92400e", text: "#fcd34d", hover: "#2a1a00" },
-    success:  { bg: "#071c0e", border: "#15803d", text: "#86efac", hover: "#0a2914" },
-    info:     { bg: "#080f1e", border: "#1d4ed8", text: "#93c5fd", hover: "#0c1730" },
-    ghost:    { bg: "transparent", border: T.border, text: T.textSub, hover: T.surfaceHi },
-    default:  { bg: T.surfaceHi, border: T.border, text: T.textSub, hover: "#1f2937" },
-  };
-  const s = styles[variant] || styles.default;
-
-  // Await the handler so the button shows a real loading state while the
-  // command round-trips through the safety gate -> Ditto -> bridge.
-  const run = async () => {
-    if (busy) return;
-    try {
-      setBusy(true);
-      await onClick?.();
-    } finally {
-      if (mountedRef.current) setBusy(false);
-    }
-  };
-
-  const handleClick = () => {
-    if (confirm) {
-      setConfirming(true);
-      return;
-    }
-    void run();
-  };
-
-  const isDisabled = disabled || busy;
-
-  return (
-    <>
-      <button
-        disabled={isDisabled}
-        onClick={handleClick}
-        className="w-full flex items-center gap-2.5 rounded-lg text-left transition-all font-semibold"
-        style={{
-          background: s.bg,
-          border: `1px solid ${s.border}`,
-          color: s.text,
-          padding: "10px 12px",
-          fontSize: 12,
-          fontWeight: 600,
-          fontFamily: "inherit",
-          letterSpacing: "0.05em",
-          cursor: isDisabled ? "not-allowed" : "pointer",
-          opacity: isDisabled ? 0.5 : 1,
-          boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
-        }}
-        onMouseEnter={e => {
-          if (!isDisabled) {
-            e.currentTarget.style.background = s.hover;
-            e.currentTarget.style.borderColor = s.borderHover || s.border;
-            e.currentTarget.style.boxShadow = "0 2px 4px rgba(0,0,0,0.08)";
-          }
-        }}
-        onMouseLeave={e => {
-          if (!isDisabled) {
-            e.currentTarget.style.background = s.bg;
-            e.currentTarget.style.borderColor = s.border;
-            e.currentTarget.style.boxShadow = "0 1px 2px rgba(0,0,0,0.04)";
-          }
-        }}
-      >
-        {busy ? <Loader2 size={14} className="eos-spin" /> : (icon && <span style={{ fontSize: 13 }}>{icon}</span>)}
-        <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-          <span>{busy ? "Working…" : label}</span>
-          {isDisabled && reason && !busy && <span style={{ color: T.textMute, fontSize: 10, fontWeight: 500, letterSpacing: 0 }}>{reason}</span>}
-        </span>
-      </button>
-      <ConfirmModal
-        open={confirming}
-        title={`Confirm command: ${label}`}
-        detail={`This command writes a control state to Eclipse Ditto and may affect the live elevator twin. Confirm only when the current operating state is safe.`}
-        confirmLabel={`Run ${label}`}
-        danger={variant === "danger"}
-        onCancel={() => setConfirming(false)}
-        onConfirm={() => {
-          setConfirming(false);
-          void run();
-        }}
-      />
-    </>
-  );
-}
-
-/** Semi-circular risk gauge */
-function RiskGauge({ score, size = 130 }) {
-  const col = riskColor(score);
-  const pct = Math.min(1, Math.max(0, score / 100));
-  const r   = size * 0.37;
-  const arc = Math.PI * r;
-  const cx = size / 2, cy = size * 0.58;
-  return (
-    <div className="flex flex-col items-center gap-2">
-      <svg width={size} height={size * 0.67} viewBox={`0 0 ${size} ${size * 0.67}`}>
-        {/* Track */}
-        <path d={`M ${cx-r} ${cy} A ${r} ${r} 0 0 1 ${cx+r} ${cy}`} fill="none" stroke={T.surfaceHi} strokeWidth={size * 0.09} strokeLinecap="round" />
-        {/* Fill */}
-        <path d={`M ${cx-r} ${cy} A ${r} ${r} 0 0 1 ${cx+r} ${cy}`} fill="none" stroke={col} strokeWidth={size * 0.075} strokeLinecap="round"
-          strokeDasharray={`${(pct * arc).toFixed(1)} ${arc}`} style={{ transition: "stroke-dasharray 0.8s ease, stroke 0.4s ease" }} />
-        {/* Score */}
-        <text x={cx} y={cy - r * 0.22} textAnchor="middle" fill={col} fontSize={size * 0.19} fontWeight="700" fontFamily="'JetBrains Mono', monospace">{Math.round(score)}</text>
-        <text x={cx} y={cy + 1} textAnchor="middle" fill={T.textMute} fontSize={size * 0.08} fontFamily="monospace">/ 100</text>
-      </svg>
-      <SevBadge sev={score >= 76 ? "CRITICAL" : score >= 41 ? "WARNING" : "NORMAL"} />
-    </div>
-  );
-}
-
-/** Live area chart */
-function TelemetryChart({ data, color, yDomain, height = 72, unit = "" }) {
-  const last = data[data.length - 1]?.v;
-  const Tip = ({ active, payload }) =>
-    active && payload?.length
-      ? <div style={{
-          background: T.surface,
-          border: `1px solid ${T.border}`,
-          borderRadius: 6,
-          padding: "6px 10px",
-          fontSize: 11,
-          color: T.text,
-          fontFamily: "monospace",
-          fontWeight: 600,
-          boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
-        }}>
-          {payload[0]?.value?.toFixed(4)}{unit}
-        </div>
-      : null;
-  return (
-    <div>
-      <div className="flex justify-end mb-2">
-        <span style={{ fontSize: 12, fontFamily: "monospace", fontWeight: 700, color }}>
-          {last?.toFixed(4)}{unit}
-        </span>
-      </div>
-      <ResponsiveContainer width="100%" height={height}>
-        <AreaChart data={data} margin={{ top: 2, right: 0, bottom: 0, left: 0 }}>
-          <defs>
-            <linearGradient id={`grad${color.replace("#","")}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%"  stopColor={color} stopOpacity={0.2} />
-              <stop offset="95%" stopColor={color} stopOpacity={0}   />
-            </linearGradient>
-          </defs>
-          <XAxis dataKey="t" hide />
-          <YAxis domain={yDomain} hide />
-          <CartesianGrid strokeDasharray="3 4" stroke={T.border} opacity={0.25} />
-          <Tooltip content={<Tip />} cursor={{ stroke: T.border, opacity: 0.3 }} />
-          <Area
-            type="natural"
-            dataKey="v"
-            stroke={color}
-            strokeWidth={1.5}
-            fill={`url(#grad${color.replace("#", "")})`}
-            dot={false}
-            isAnimationActive={false}
-            animationDuration={300}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
-
-/** Elevator shaft SVG */
-function ElevatorShaft({ state, compact = false }) {
-  const c    = state.features.cabin.properties;
-  const door = state.features.door.properties;
-  const fIdx = Math.max(0, Math.min(NUM_FLOORS - 1, c.current_floor));
-  const SH   = NUM_FLOORS * FLOOR_H;
-  const cabY = SH - (fIdx + 1) * FLOOR_H + 3;
-  const open = door.state === "OPEN" || door.state === "OPENING";
-  const isE  = c.emergency_stop;
-  const lPct = Math.min(1, c.load_kg / MAX_LOAD);
-  const lCol = lPct > 0.95 ? T.red : lPct > 0.7 ? T.yellow : T.green;
-  const W    = compact ? 110 : 148;
-
-  return (
-    <div className="flex flex-col items-center gap-3">
-      <svg width={W + 52} height={SH + 12} viewBox={`0 0 ${W + 52} ${SH + 12}`}>
-        {/* Floor markers */}
-        {Array.from({ length: NUM_FLOORS }, (_, i) => {
-          const y = SH - (i + 1) * FLOOR_H;
-          return (
-            <g key={i}>
-              <line x1="38" y1={y + FLOOR_H} x2={W + 38} y2={y + FLOOR_H} stroke={T.border} strokeWidth="1" opacity="0.5" />
-              <text x="30" y={y + FLOOR_H - 5} textAnchor="end" fill={T.textMute} fontSize="10" fontFamily="monospace" fontWeight="600">{FLOOR_LABELS[i]}</text>
-              {c.target_floor === i && c.current_floor !== i && (
-                <g>
-                  <circle cx={W + 46} cy={y + FLOOR_H / 2} r="4" fill={T.blue} opacity="0.8">
-                    <animate attributeName="opacity" values="0.8;0.2;0.8" dur="1.2s" repeatCount="indefinite" />
-                  </circle>
-                  <text x={W + 46} y={y + FLOOR_H / 2 + 3} textAnchor="middle" fill={T.blue} fontSize="6" fontFamily="monospace">DOWN</text>
-                </g>
-              )}
-            </g>
-          );
-        })}
-        {/* Shaft */}
-        <rect x="38" y="0" width={W} height={SH} fill={T.surfaceHi} stroke={T.border} strokeWidth="1.5" rx="4" />
-        {/* Guide rails */}
-        <line x1="47" y1="0" x2="47" y2={SH} stroke={T.border} strokeWidth="1.5" opacity="0.5" />
-        <line x1={W + 29} y1="0" x2={W + 29} y2={SH} stroke={T.border} strokeWidth="1.5" opacity="0.5" />
-        {/* Cabin - animated */}
-        <g style={{ transform: `translateY(${cabY}px)`, transition: "transform 0.9s cubic-bezier(0.4,0,0.2,1)" }}>
-          {/* Cabin body */}
-          <rect
-            x="42"
-            y="3"
-            width={W - 8}
-            height={FLOOR_H - 8}
-            fill={isE ? T.redDim : T.blueDim}
-            stroke={isE ? T.red : T.blue}
-            strokeWidth="2"
-            rx="4"
-          />
-          {/* Door panels */}
-          {!open && (
-            <>
-              <rect x="42" y="3" width={(W - 8) / 2} height={FLOOR_H - 8} fill={isE ? "#200000" : "#0c2346"} rx="4" opacity="0.9" />
-              <rect x={42 + (W - 8) / 2} y="3" width={(W - 8) / 2} height={FLOOR_H - 8} fill={isE ? "#200000" : "#0c2346"} rx="4" opacity="0.9" />
-              <line x1={42 + (W - 8) / 2} y1="5" x2={42 + (W - 8) / 2} y2={FLOOR_H - 10} stroke={isE ? T.red : T.blue} strokeWidth="1.5" opacity="0.6" />
-            </>
-          )}
-          {/* Load bar */}
-          <rect x="46" y={FLOOR_H - 14} width={W - 16} height="5" fill={T.border} rx="2.5" />
-          <rect x="46" y={FLOOR_H - 14} width={(W - 16) * lPct} height="5" fill={lCol} rx="2.5" style={{ transition: "width 0.5s ease, fill 0.4s" }} />
-          {/* Floor number */}
-          <text x={42 + (W - 8) / 2} y={FLOOR_H / 2 - 2} textAnchor="middle" fill={isE ? "#fca5a5" : "#60a5fa"} fontSize={compact ? 17 : 21} fontFamily="monospace" fontWeight="700">{FLOOR_LABELS[fIdx]}</text>
-          {/* Load kg */}
-          <text x={42 + (W - 8) / 2} y={FLOOR_H / 2 + 14} textAnchor="middle" fill={lCol} fontSize="9" fontFamily="monospace">{Math.round(c.load_kg)} kg</text>
-          {/* E-stop overlay */}
-          {isE && <text x={42 + (W - 8) / 2} y={FLOOR_H - 22} textAnchor="middle" fill={T.red} fontSize="8" fontFamily="monospace" fontWeight="700">E-STOP</text>}
-        </g>
-        {/* Speed readout */}
-        <text x={W + 40} y="14" fill={T.textMute} fontSize="9" fontFamily="monospace">{c.speed_ms.toFixed(1)} m/s</text>
-      </svg>
-
-      {/* Direction badge */}
-      <StatusPill
-        label={c.direction === "UP" ? "UP / ASCENDING" : c.direction === "DOWN" ? "DOWN / DESCENDING" : "IDLE"}
-        color={c.direction === "UP" ? T.green : c.direction === "DOWN" ? T.yellow : T.textMute}
-      />
-    </div>
-  );
-}
-
-/** Health bar */
-function HealthBar({ label, pct, color }) {
-  return (
-    <div>
-      <div className="flex justify-between mb-2">
-        <span className="text-xs font-medium" style={{ color: T.textSub }}>
-          {label}
-        </span>
-        <span className="text-xs font-bold font-mono" style={{ color }}>
-          {Math.round(pct)}%
-        </span>
-      </div>
-      <div className="rounded-full overflow-hidden" style={{ height: 5, background: T.border }}>
-        <div
-          className="h-full rounded-full"
-          style={{
-            width: `${Math.min(100, pct)}%`,
-            background: color,
-            transition: "width 0.6s ease-out",
-          }}
-        />
-      </div>
-    </div>
-  );
-}
-
-/** Cooling fan control card.
- * Displays the current fan state and exposes manual ON/OFF + AUTO buttons.
- * Reads the temperature thresholds from FAN_THERMAL so the UI tooltip stays
- * in sync with the cooling algorithm. */
-function FanControlCard({ fan, motorTempC, cabinTempC, setFan }) {
-  const state = String(fan?.state || "OFF").toUpperCase();
-  const mode  = String(fan?.mode || "AUTO").toUpperCase();
-  const accent = state === "ON" ? T.cyan : T.textMute;
-  const overrideActive = motorTempC >= FAN_THERMAL.CRITICAL_MOTOR_C;
-  const runtimeMin = Number(fan?.runtime_today_min) || 0;
-  return (
-    <Card title="Cooling Fan" accent={accent}>
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-          <FieldTile label="State" value={state} color={state === "ON" ? T.cyan : T.textSub} sub={fan?.reason || ""} />
-          <FieldTile label="Mode"  value={mode}  color={mode === "AUTO" ? T.green : T.yellow} sub={overrideActive ? "SAFETY OVERRIDE" : (mode === "AUTO" ? "Algorithmic" : "Manual")} />
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-          <FieldTile label="Motor temp" value={`${Number(motorTempC).toFixed(1)} degC`} color={motorTempC >= FAN_THERMAL.CRITICAL_MOTOR_C ? T.red : motorTempC >= FAN_THERMAL.ON_MOTOR_C ? T.yellow : T.textSub}
-            sub={`ON >= ${FAN_THERMAL.ON_MOTOR_C} / OFF <= ${FAN_THERMAL.OFF_MOTOR_C} degC`} />
-          <FieldTile label="Runtime today" value={`${runtimeMin.toFixed(1)} min`} color={T.textSub} sub={`Cabin ${Number(cabinTempC).toFixed(1)} degC`} />
-        </div>
-        <div style={{ display: "flex", gap: 6 }}>
-          <CmdBtn label="Fan ON"   icon="ON"   onClick={() => setFan({ state: "ON",  mode: "MANUAL" })} variant="info"    disabled={state === "ON"  && mode === "MANUAL"} />
-          <CmdBtn label="Fan OFF"  icon="OFF"  onClick={() => setFan({ state: "OFF", mode: "MANUAL" })} variant="default" disabled={overrideActive || (state === "OFF" && mode === "MANUAL")} reason={overrideActive ? "Safety override locked ON" : undefined} />
-          <CmdBtn label="AUTO"     icon="A"    onClick={() => setFan({ state, mode: "AUTO"   })} variant="success" disabled={mode === "AUTO"} />
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-/** Toast notification stack */
-function ToastStack({ toasts, dismiss }) {
-  if (!toasts.length) return null;
-  const sevConfig = {
-    CRITICAL: { bg: T.redDim, border: T.red, text: T.red, icon: "LOCK" },
-    WARNING:  { bg: T.yellowDim, border: T.yellow, text: T.yellow, icon: "⚡" },
-    INFO:     { bg: T.blueDim, border: T.blue, text: T.blue, icon: "◎" },
-  };
-  Object.assign(sevConfig, {
-    CRITICAL: { ...sevConfig.CRITICAL, icon: "!" },
-    WARNING: { ...sevConfig.WARNING, icon: "WARN" },
-    INFO: { ...sevConfig.INFO, icon: "INFO" },
-  });
-  return (
-    <div style={{
-      position: "fixed",
-      top: 70,
-      right: 20,
-      zIndex: 1000,
-      display: "flex",
-      flexDirection: "column",
-      gap: 8,
-      minWidth: 320,
-      maxWidth: 400,
-      pointerEvents: "none",
-    }}>
-      {toasts.map(t => {
-        const cfg = sevConfig[t.severity] || sevConfig.INFO;
-        return (
-          <div
-            key={t.id}
-            style={{
-              background: cfg.bg,
-              border: `1px solid ${cfg.border}`,
-              borderRadius: 8,
-              padding: "12px 14px",
-              display: "flex",
-              gap: 10,
-              alignItems: "flex-start",
-              pointerEvents: "auto",
-              animation: "slideIn 0.3s ease-out",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06)",
-            }}
-          >
-            <span style={{ color: cfg.border, fontSize: 14, flexShrink: 0, marginTop: 1 }}>
-              {cfg.icon}
-            </span>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: cfg.border, letterSpacing: "0.08em", marginBottom: 2 }}>
-                {t.severity}
-              </div>
-              <div style={{ fontSize: 13, color: T.text, lineHeight: 1.4 }}>
-                {t.message}
-              </div>
-            </div>
-            <button
-              onClick={() => dismiss(t.id)}
-              style={{
-                color: T.textMute,
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                fontSize: 16,
-                lineHeight: 1,
-                flexShrink: 0,
-                transition: "color 0.2s",
-              }}
-              onMouseEnter={e => (e.currentTarget.style.color = cfg.border)}
-              onMouseLeave={e => (e.currentTarget.style.color = T.textMute)}
-            >
-              x
-            </button>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/** Global lockdown / alert banner */
-function GlobalAlertBanner({ state }) {
-  const { system_mode } = state.attributes;
-  const { alert_level } = state.features.security.properties;
-  const active = system_mode === "LOCKDOWN" || alert_level === "CRITICAL";
-  if (!active) return null;
-  return (
-    <div
-      style={{
-        background: T.redDim,
-        borderBottom: `2px solid ${T.red}`,
-        padding: "10px 20px",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        gap: 12,
-        animation: "criticalPulse 1s ease-in-out infinite alternate",
-      }}
-    >
-      <span style={{ color: T.red, fontSize: 13, fontWeight: 900 }}>ALERT</span>
-      <span
-        style={{
-          color: T.red,
-          fontSize: 11,
-          fontFamily: "monospace",
-          fontWeight: 700,
-          letterSpacing: "0.15em",
-        }}
-      >
-        SYSTEM ALERT - {system_mode === "LOCKDOWN" ? "FULL LOCKDOWN ACTIVE" : `SECURITY LEVEL: ${alert_level}`}
-      </span>
-      <span style={{ color: T.red, fontSize: 13, fontWeight: 900 }}>ALERT</span>
-    </div>
-  );
-}
 
 // SIDEBAR
 function Sidebar({ page, setPage, state, connected }) {
@@ -3978,56 +3356,6 @@ function PageSimulation() {
   );
 }
 
-function TableShell({ children }) {
-  return <div style={{ overflowX: "auto", width: "100%" }}>{children}</div>;
-}
-
-function MiniIconButton({ title, onClick, children, active = false }) {
-  return (
-    <button type="button" title={title} onClick={onClick} className="eos-icon-button" data-active={active ? "true" : "false"}>
-      {children}
-    </button>
-  );
-}
-
-function ToggleSwitch({ checked, onChange, label, detail }) {
-  return (
-    <label className="eos-toggle-row">
-      <span>
-        <strong>{label}</strong>
-        {detail && <small>{detail}</small>}
-      </span>
-      <button type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)} className="eos-toggle" data-on={checked ? "true" : "false"}>
-        <span />
-      </button>
-    </label>
-  );
-}
-
-function SettingsSection({ title, accent = T.cyan, children }) {
-  return <Card title={title} accent={accent}>{children}</Card>;
-}
-
-function ConfirmModal({ open, title, detail, confirmLabel = "Confirm", cancelLabel = "Cancel", onConfirm, onCancel, danger = false }) {
-  if (!open) return null;
-  return (
-    <div className="eos-modal-backdrop" role="presentation">
-      <div className="eos-modal" role="dialog" aria-modal="true">
-        <div className="eos-modal-head">
-          <div>
-            <h2>{title}</h2>
-            <p>{detail}</p>
-          </div>
-          <MiniIconButton title="Close dialog" onClick={onCancel}><X size={16} /></MiniIconButton>
-        </div>
-        <div className="eos-card-actions">
-          <button type="button" onClick={onCancel} className="eos-soft-button">{cancelLabel}</button>
-          <button type="button" onClick={onConfirm} className={danger ? "eos-danger-button" : "eos-primary-button"}>{confirmLabel}</button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function AppSidebar({ page, setPage, collapsed, setCollapsed, mobileOpen, setMobileOpen, state, connected }) {
   const mode = state.attributes.system_mode;
@@ -4248,7 +3576,7 @@ function PageMonitoring() {
 }
 
 function PageControlPanel() {
-  const { state, sendFloor, emergencyStop, lockdown, maintenance, reset, requestStatusRefresh, softStop, home, freshStart, runDeviceDiagnostic, optimizeRouting, reduceEnergy, setFan, openDoor, closeDoor, clearQueue, injectHighVib, injectForcedEntry, injectAudioDistress, injectInvalidRFID, runScenario, cmdLog, connected, dittoConnected } = useTwin();
+  const { state, sendFloor, emergencyStop, lockdown, maintenance, reset, requestStatusRefresh, softStop, home, freshStart, runDeviceDiagnostic, optimizeRouting, reduceEnergy, setFan, openDoor, closeDoor, clearQueue, injectHighVib, injectForcedEntry, injectAudioDistress, injectInvalidRFID, runScenario, cmdLog, connected, dittoConnected, activeCommand, commandInFlight } = useTwin();
   const cabin = state.features.cabin.properties;
   const motor = state.features.motor.properties;
   const fan = state.features.fan.properties;
@@ -4282,8 +3610,8 @@ function PageControlPanel() {
           </div>
         </Card>
         <Card title="Elevator Dispatch" accent={T.blue}>
-          <div className="eos-floor-grid">{Array.from({ length: NUM_FLOORS }, (_, i) => <button key={i} type="button" onClick={() => sendFloor(i)} disabled={movementBlocked} className={cabin.current_floor === i ? "is-active" : cabin.target_floor === i ? "is-target" : ""}>{FLOOR_LABELS[i]}</button>)}</div>
-          <div className="eos-command-feedback">Target floor: {FLOOR_LABELS[cabin.target_floor]} / Direction: {cabin.direction} / Safety gate: {movementBlocked ? "blocked" : "clear"}</div>
+          <div className="eos-floor-grid">{Array.from({ length: NUM_FLOORS }, (_, i) => <button key={i} type="button" onClick={() => sendFloor(i)} disabled={movementBlocked || commandInFlight} className={cabin.current_floor === i ? "is-active" : cabin.target_floor === i ? "is-target" : ""}>{FLOOR_LABELS[i]}</button>)}</div>
+          <div className="eos-command-feedback">Target floor: {FLOOR_LABELS[cabin.target_floor]} / Direction: {cabin.direction} / Safety gate: {movementBlocked ? "blocked" : "clear"}{activeCommand ? ` / Command: ${activeCommand.command || "-"} ${activeCommand.status}` : ""}</div>
         </Card>
         <Card title="Collective Request Queue" accent={requestQueue.pending_count > 0 ? T.cyan : T.borderHi}>
           <div className="eos-kpi-grid" style={{ marginBottom: 12 }}>
@@ -4343,6 +3671,9 @@ function PageControlPanel() {
       {/* AI-Adaptive Dispatch: the brain's live policy choice, score table,
           intent-vs-applied, shadow challengers, and the guarded manual override. */}
       <DispatchPolicyPanel />
+      {/* Agent Activity Timeline: a live, real-data stream of the autonomous loop —
+          brain decisions interleaved with the safety gate's ACCEPT/REJECT verdicts. */}
+      <AgentActivityPanel />
     </div>
   );
 }
