@@ -10,7 +10,7 @@
 // ropes + counterweight (moves opposite the cabin), per-floor call lights, and an
 // interactive status HUD with click-to-dispatch (respecting the safety gate).
 
-import { useRef, useState, useMemo, useEffect } from "react";
+import { useRef, useState, useMemo, useEffect, Suspense } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, Html } from "@react-three/drei";
 import * as THREE from "three";
@@ -300,6 +300,7 @@ function RopesAndCounterweight({ stateRef, palette, setHovered }) {
 // ── Per-floor hall-call lights ───────────────────────────────────────────────
 function FloorCalls({ stateRef, palette }) {
   const refs = useRef(Array.from({ length: NUM_FLOORS }, () => ({ mesh: null, mat: null })));
+  const reduced = useMemo(prefersReducedMotion, []);
   useFrame(() => {
     const s = stateRef.current;
     const q = s.features.request_queue.properties;
@@ -312,7 +313,7 @@ function FloorCalls({ stateRef, palette }) {
       const target = priority ? palette.crit : called ? palette.warn : palette.idle;
       r.mat.color.set(target);
       r.mat.emissive.set(target);
-      r.mat.emissiveIntensity = priority ? 0.6 + 0.4 * Math.sin(performance.now() / 220)
+      r.mat.emissiveIntensity = priority ? (reduced ? 0.85 : 0.6 + 0.4 * Math.sin(performance.now() / 220))
         : called ? 0.6 : 0.05;
     }
   });
@@ -442,13 +443,20 @@ export default function DigitalTwinScene({ state, sendFloor, movementBlocked = f
   const cab = state.features.cabin.properties;
   const modeColor = attr.system_mode === "NORMAL" ? T.green : attr.system_mode === "MAINTENANCE" ? T.yellow : T.red;
   const readout = hoverReadout(hovered, state);
+  const ariaLabel = `3D elevator digital twin. Cabin at floor ${FLOOR_LABELS[cab.current_floor] ?? "?"}, direction ${cab.direction}, system ${attr.system_mode}, risk ${Math.round(attr.risk_score)} of 100. Drag to orbit; use the dispatch buttons to send the cabin to a floor.`;
 
   return (
-    <div style={{ position: "relative", width: "100%", height, borderRadius: 16, overflow: "hidden", border: `1px solid ${T.border}`, background: `radial-gradient(circle at 50% 18%, ${T.surfaceHi}, ${T.bg})` }}>
-      {mounted && (
+    <div role="img" aria-label={ariaLabel} style={{ position: "relative", width: "100%", height, borderRadius: 16, overflow: "hidden", border: `1px solid ${T.border}`, background: `radial-gradient(circle at 50% 18%, ${T.surfaceHi}, ${T.bg})` }}>
+      {mounted ? (
         <Canvas shadows dpr={[1, 2]} camera={{ position: [7, 5, 9], fov: 38 }} style={{ cursor: hovered ? "pointer" : "grab" }}>
-          <SceneContents stateRef={stateRef} palette={palette} showLabels={showLabels} showSensors={showSensors} setHovered={setHovered} />
+          <Suspense fallback={null}>
+            <SceneContents stateRef={stateRef} palette={palette} showLabels={showLabels} showSensors={showSensors} setHovered={setHovered} />
+          </Suspense>
         </Canvas>
+      ) : (
+        <div aria-hidden style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", color: T.textMute, fontSize: 12, fontFamily: "ui-monospace, Consolas, monospace", letterSpacing: "0.08em" }}>
+          Initializing 3D twin…
+        </div>
       )}
 
       {/* Top-left status */}
@@ -460,8 +468,8 @@ export default function DigitalTwinScene({ state, sendFloor, movementBlocked = f
 
       {/* Top-right controls */}
       <div style={{ position: "absolute", top: 10, right: 12, display: "flex", gap: 6 }}>
-        <button type="button" onClick={() => setShowSensors(v => !v)} style={ctrlBtn(showSensors)}>Sensors</button>
-        <button type="button" onClick={() => setShowLabels(v => !v)} style={ctrlBtn(showLabels)}>Labels</button>
+        <button type="button" aria-pressed={showSensors} onClick={() => setShowSensors(v => !v)} style={ctrlBtn(showSensors)}>Sensors</button>
+        <button type="button" aria-pressed={showLabels} onClick={() => setShowLabels(v => !v)} style={ctrlBtn(showLabels)}>Labels</button>
       </div>
 
       {/* Hover readout */}
@@ -478,6 +486,7 @@ export default function DigitalTwinScene({ state, sendFloor, movementBlocked = f
         {Array.from({ length: NUM_FLOORS }, (_, i) => (
           <button key={i} type="button" disabled={movementBlocked || !sendFloor}
             onClick={() => sendFloor && sendFloor(i)}
+            aria-label={`Dispatch cabin to floor ${FLOOR_LABELS[i]}`}
             title={movementBlocked ? "Movement blocked by active safety state" : `Dispatch to floor ${FLOOR_LABELS[i]}`}
             style={dispatchBtn(cab.current_floor === i, cab.target_floor === i, movementBlocked)}>
             {FLOOR_LABELS[i]}
