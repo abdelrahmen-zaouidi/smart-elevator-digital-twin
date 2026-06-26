@@ -1101,7 +1101,7 @@ const DEFAULT_PROFILE = {
 
 const DEFAULT_PREFERENCES = {
   theme: "dark",
-  accentColor: "#22d3ee",
+  accentColor: "#5e9cc0",
   compactMode: false,
   sidebarCollapsed: false,
   density: "comfortable",
@@ -2390,7 +2390,7 @@ function PageCommand() {
               {Array.from({ length: NUM_FLOORS }, (_, i) => (
                 <button key={i} onClick={() => sendFloor(i)} disabled={movementBlocked} title={movementReason || `Dispatch to floor ${FLOOR_LABELS[i]}`} style={{
                   padding: "8px 0", borderRadius: 8, fontFamily: "monospace", fontWeight: 700, fontSize: 13, cursor: "pointer", transition: "all 0.15s",
-                  background: c.current_floor === i ? "#0d1f3c" : T.surfaceHi,
+                  background: c.current_floor === i ? T.blueDim : T.surfaceHi,
                   border: `1px solid ${c.current_floor === i ? T.blue : c.target_floor === i ? T.textMute : T.border}`,
                   color: c.current_floor === i ? T.blue : c.target_floor === i ? T.cyan : T.textMute,
                   opacity: movementBlocked ? 0.45 : 1,
@@ -2745,7 +2745,7 @@ function PageSOC() {
       <div style={{ padding: "10px 16px", borderRadius: 10, background: threatColor + "10", border: `1px solid ${threatColor}40`, display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
         {["NORMAL", "ELEVATED", "HIGH", "CRITICAL"].map(l => {
           const active = l === threatLevel;
-          const col = { NORMAL: T.green, ELEVATED: T.yellow, HIGH: "#f97316", CRITICAL: T.red }[l];
+          const col = { NORMAL: T.green, ELEVATED: T.yellow, HIGH: T.orange, CRITICAL: T.red }[l];
           return (
             <div key={l} style={{ display: "flex", alignItems: "center", gap: 7 }}>
               <div style={{ width: 11, height: 11, borderRadius: 3, background: active ? col : T.surfaceHi, border: `1px solid ${col}50`, animation: active && l !== "NORMAL" ? "pulse 1s infinite" : undefined }} />
@@ -3935,7 +3935,7 @@ function PageSettings() {
         <ToggleSwitch checked={preferences.theme === "dark"} onChange={value => setPref("theme", value ? "dark" : "light")} label="Dark mode" detail="Applies the industrial command center theme." />
         <ToggleSwitch checked={preferences.compactMode} onChange={value => setPref("compactMode", value)} label="Compact mode" detail="Reduces dashboard spacing." />
         <ToggleSwitch checked={preferences.sidebarCollapsed} onChange={value => setPref("sidebarCollapsed", value)} label="Sidebar collapsed" detail="Persist the navigation width preference." />
-        <label className="eos-field-label">Accent color<select value={preferences.accentColor} onChange={event => setPref("accentColor", event.target.value)}><option value="#22d3ee">Cyan</option><option value="#60a5fa">Blue</option><option value="#34d399">Green</option><option value="#c084fc">Violet</option></select></label>
+        <label className="eos-field-label">Accent color<select value={preferences.accentColor} onChange={event => setPref("accentColor", event.target.value)}><option value="#5e9cc0">Steel</option><option value="#6c9bce">Blue</option><option value="#5bb592">Green</option><option value="#9b8ecb">Violet</option></select></label>
         <label className="eos-field-label">Dashboard density<select value={preferences.density} onChange={event => setPref("density", event.target.value)}><option value="comfortable">Comfortable</option><option value="compact">Compact</option><option value="expanded">Expanded</option></select></label>
       </SettingsSection>
       <SettingsSection title="System Settings" accent={T.blue}>

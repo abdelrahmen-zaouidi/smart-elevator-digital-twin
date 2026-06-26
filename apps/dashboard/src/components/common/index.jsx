@@ -175,13 +175,14 @@ export function CmdBtn({ label, icon, onClick, variant = "default", disabled = f
     };
   }, []);
 
+  // Calm control-room button variants (desaturated, dark-tinted; no neon).
   const styles = {
-    danger:   { bg: "#1c0a0a", border: "#7f1d1d", text: "#fca5a5", hover: "#2d0f0f" },
-    warning:  { bg: "#1c1200", border: "#92400e", text: "#fcd34d", hover: "#2a1a00" },
-    success:  { bg: "#071c0e", border: "#15803d", text: "#86efac", hover: "#0a2914" },
-    info:     { bg: "#080f1e", border: "#1d4ed8", text: "#93c5fd", hover: "#0c1730" },
+    danger:   { bg: "#211314", border: "#6b3a37", text: "#d4948e", hover: "#2a1819" },
+    warning:  { bg: "#201910", border: "#6b5a33", text: "#cdb079", hover: "#2a2014" },
+    success:  { bg: "#122019", border: "#36664f", text: "#8fc7a8", hover: "#16271f" },
+    info:     { bg: "#121a24", border: "#3a5573", text: "#9bbcd8", hover: "#16212e" },
     ghost:    { bg: "transparent", border: T.border, text: T.textSub, hover: T.surfaceHi },
-    default:  { bg: T.surfaceHi, border: T.border, text: T.textSub, hover: "#1f2937" },
+    default:  { bg: T.surfaceHi, border: T.border, text: T.textSub, hover: T.borderHi },
   };
   const s = styles[variant] || styles.default;
 
