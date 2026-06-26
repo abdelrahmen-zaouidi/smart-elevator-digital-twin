@@ -2,103 +2,25 @@
 // Authoritative state comes from Eclipse Ditto through useDitto; operator
 // commands are submitted through /api/commands and the deterministic safety gate.
 
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
-  useState, useEffect, useRef, useCallback,
-  createContext, useContext, useMemo,
-} from "react";
-import {
-  AreaChart, Area, LineChart, Line, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-} from "recharts";
-import {
-  Activity,
-  AlertTriangle,
-  BarChart3,
-  Bell,
-  BookOpen,
-  ChevronLeft,
-  ChevronRight,
-  CircleHelp,
-  Clock,
-  Ban,
-  Cpu,
-  Database,
-  DoorClosed,
-  DoorOpen,
-  Download,
-  Eye,
-  EyeOff,
-  FileText,
-  Gauge,
-  KeyRound,
-  LayoutDashboard,
-  ListX,
-  Loader2,
-  LogOut,
-  Menu,
-  Monitor,
-  Moon,
-  PanelLeftClose,
-  PanelLeftOpen,
-  Pencil,
-  Plus,
-  Power,
-  RadioTower,
-  RefreshCw,
-  Save,
-  Search,
-  Settings,
-  Shield,
-  SlidersHorizontal,
-  Sun,
-  Terminal,
-  Trash2,
-  User,
-  Wrench,
-  X,
+  Bell, BookOpen, Clock, Eye, EyeOff, LogOut, Menu, Moon,
+  PanelLeftClose, PanelLeftOpen, Search, Settings, Sun, User, X,
 } from "lucide-react";
-import { env } from "../src/config/env";
-import { useDitto } from "../src/hooks/useDitto";
-import { reconcileCommandResult, submitCommand } from "../src/services/commandClient";
-import {
-  activeCommandFromThing,
-  commandOutcomeMessage,
-  commandResultForId,
-  normalizeCommandStatus,
-} from "@smart-elevator/shared/commandLifecycle.js";
-import { useAccessControl } from "../src/hooks/useAccessControl";
-import { recordAccessEvent } from "../src/services/accessControlClient";
-import { createSpeedEstimator } from "../src/lib/speedEstimator";
-import { ROLES, normalizeUid } from "../src/lib/accessControl";
-import CommandSafetyGatePanel from "./scada/CommandSafetyGatePanel";
-import DispatchPolicyPanel from "./scada/DispatchPolicyPanel";
-import AgentActivityPanel from "./scada/AgentActivityPanel";
 import { T, applyThemeTokens } from "../src/theme/tokens";
+import { FLOOR_LABELS, riskColor } from "../src/lib/twinConstants";
 import {
-  NUM_FLOORS, FLOOR_LABELS, FLOOR_H, MAX_LOAD, MOTOR_LIFE_H,
-  HISTORY_LIMIT, TIMELINE_LIMIT,
-  riskColor, riskLabel, healthColor, fmtTime, relTime,
-  FAN_THERMAL, decideFanState,
-} from "../src/lib/twinConstants";
-import {
-  Card, KpiTile, StatusPill, SevBadge, EmptyState, FieldTile,
-  ConnectionIndicator, CmdBtn, RiskGauge, TelemetryChart, HealthBar,
-  FanControlCard, ToastStack, GlobalAlertBanner, TableShell,
-  MiniIconButton, ToggleSwitch, SettingsSection, ConfirmModal,
+  StatusPill, SevBadge, EmptyState, FieldTile, ConnectionIndicator,
+  ToastStack, GlobalAlertBanner, MiniIconButton, ConfirmModal,
 } from "../src/components/common";
-import ElevatorShaft from "../src/components/twin/ElevatorShaft";
-import DigitalTwinScene from "../src/components/twin/DigitalTwinScene";
 import {
-  DEFAULT_PREFERENCES, DEFAULT_PROFILE, FIRMWARE_DIAGNOSTIC_COMMANDS, INIT_STATE,
-  PAGES, PAGE_GROUPS, SCENARIO_DEFS, TwinContext, buildRequestQueueRows,
-  commandResultSeverity, getAiAnalysis, getAnalysisText, getMicrocontrollerStatus,
-  getSeverityFromRisk, hasFeatureDataBeyondSeed, incidentIdentifier,
-  useDigitalTwinEngine, useHistoryApi, useStoredObject, useTwin,
+  DEFAULT_PREFERENCES, DEFAULT_PROFILE, PAGES, PAGE_GROUPS, TwinContext,
+  getMicrocontrollerStatus, useDigitalTwinEngine, useStoredObject,
 } from "../src/twin/engine";
 import {
-  PageCommand, PageTwin, PageAIInsights, PageSOC, PageAccessControl, PageMaintenance,
-  PageSimulation, PageMonitoring, PageControlPanel, PageAlerts, PageLogs, PageDevices,
-  PageReports, PageSettings, PageHelp,
+  PageTwin, PageAIInsights, PageSOC, PageAccessControl, PageMaintenance,
+  PageMonitoring, PageControlPanel, PageAlerts, PageDevices, PageReports,
+  PageSettings, PageHelp,
 } from "../src/components/pages";
 
 
