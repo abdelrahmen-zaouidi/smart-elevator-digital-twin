@@ -5,32 +5,11 @@
 // migrated onto the CSS-variable tokens in app/globals.css; until that migration
 // completes, components read colours from this live object.
 //
-// NOTE: the first `T = {...}` block is immediately overwritten by the Object.assign
-// below. It is preserved verbatim here (move-then-refactor) and slated for removal
-// in the dead-code stage.
+// The live token object. Populated entirely by the dark Object.assign below
+// (the runtime default); applyThemeTokens swaps it to LIGHT_TOKENS when needed.
+export const T = {};
 
-export const T = {
-  bg:        "#050a12",
-  surface:   "#ffffff",   // Pure white - panel background
-  surfaceHi: "#f0f4f9",   // Light blue-gray - elevated panel
-  border:    "#d1dce6",   // Soft gray border
-  borderHi:  "#b8c5d6",   // Darker border for hover
-  text:      "#0f1419",   // Dark text - primary
-  textSub:   "#4a5568",   // Medium gray - secondary
-  textMute:  "#8a92a2",   // Light gray - muted
-  green:     "#059669",   // Emerald for success
-  greenDim:  "#d1fae5",   // Light emerald background
-  yellow:    "#d97706",   // Amber for warning
-  yellowDim: "#fef3c7",   // Light amber background
-  red:       "#dc2626",   // Red for critical
-  redDim:    "#fee2e2",   // Light red background
-  blue:      "#2563eb",   // Blue for info
-  blueDim:   "#dbeafe",   // Light blue background
-  cyan:      "#0891b2",   // Cyan accent
-  purple:    "#7c3aed",   // Purple accent
-};
-
-// Dark theme (runtime default) overrides every token above.
+// Dark theme (runtime default) — the calm control-room palette.
 // Calm "control-room" palette: low-chroma neutrals, one muted steel-teal accent
 // (cyan), desaturated semantic colours. No neon. (stage e recolor)
 Object.assign(T, {
