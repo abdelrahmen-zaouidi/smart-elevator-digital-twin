@@ -91,7 +91,7 @@ function Cabin({ stateRef, palette, setHovered }) {
   const loadBar = useRef();
   const loadMat = useRef();
   const openRef = useRef(0);
-  const reduced = useMemo(prefersReducedMotion, []);
+  const reduced = useMemo(() => prefersReducedMotion(), []);
   const cEstop = useMemo(() => new THREE.Color(palette.cabinEstop), [palette]);
   const cBase = useMemo(() => new THREE.Color(palette.cabin), [palette]);
 
@@ -161,7 +161,7 @@ function TractionMachine({ stateRef, palette, setHovered, sheaveRef }) {
   const motorGroup = useRef();
   const motorMat = useRef();
   const prevCabinY = useRef(cabinCenterY(0));
-  const reduced = useMemo(prefersReducedMotion, []);
+  const reduced = useMemo(() => prefersReducedMotion(), []);
   const cCool = useMemo(() => new THREE.Color(palette.motor), [palette]);
   const cHot = useMemo(() => new THREE.Color(palette.motorHot), [palette]);
 
@@ -300,7 +300,7 @@ function RopesAndCounterweight({ stateRef, palette, setHovered }) {
 // ── Per-floor hall-call lights ───────────────────────────────────────────────
 function FloorCalls({ stateRef, palette }) {
   const refs = useRef(Array.from({ length: NUM_FLOORS }, () => ({ mesh: null, mat: null })));
-  const reduced = useMemo(prefersReducedMotion, []);
+  const reduced = useMemo(() => prefersReducedMotion(), []);
   useFrame(() => {
     const s = stateRef.current;
     const q = s.features.request_queue.properties;
@@ -431,13 +431,14 @@ function hoverReadout(key, s) {
 // ── Public component ─────────────────────────────────────────────────────────
 export default function DigitalTwinScene({ state, sendFloor, movementBlocked = false, height = 380 }) {
   const stateRef = useRef(state);
-  stateRef.current = state;
   const [mounted, setMounted] = useState(false);
   const [palette, setPalette] = useState(readTwinPalette);
   const [showLabels, setShowLabels] = useState(true);
   const [showSensors, setShowSensors] = useState(false);
   const [hovered, setHovered] = useState(null);
   useEffect(() => { setMounted(true); setPalette(readTwinPalette()); }, []);
+  // Keep the ref fed with the latest telemetry for the useFrame animation loop.
+  useEffect(() => { stateRef.current = state; });
 
   const attr = state.attributes;
   const cab = state.features.cabin.properties;

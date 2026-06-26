@@ -265,25 +265,29 @@ export function RiskGauge({ score, size = 130 }) {
   );
 }
 
+/** Recharts tooltip body (module-level so it is not re-created each render). */
+function ChartTooltip({ active, payload, unit = "" }) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{
+      background: T.surface,
+      border: `1px solid ${T.border}`,
+      borderRadius: 6,
+      padding: "6px 10px",
+      fontSize: 11,
+      color: T.text,
+      fontFamily: "monospace",
+      fontWeight: 600,
+      boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
+    }}>
+      {payload[0]?.value?.toFixed(4)}{unit}
+    </div>
+  );
+}
+
 /** Live area chart */
 export function TelemetryChart({ data, color, yDomain, height = 72, unit = "" }) {
   const last = data[data.length - 1]?.v;
-  const Tip = ({ active, payload }) =>
-    active && payload?.length
-      ? <div style={{
-          background: T.surface,
-          border: `1px solid ${T.border}`,
-          borderRadius: 6,
-          padding: "6px 10px",
-          fontSize: 11,
-          color: T.text,
-          fontFamily: "monospace",
-          fontWeight: 600,
-          boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
-        }}>
-          {payload[0]?.value?.toFixed(4)}{unit}
-        </div>
-      : null;
   return (
     <div>
       <div className="flex justify-end mb-2">
@@ -302,7 +306,7 @@ export function TelemetryChart({ data, color, yDomain, height = 72, unit = "" })
           <XAxis dataKey="t" hide />
           <YAxis domain={yDomain} hide />
           <CartesianGrid strokeDasharray="3 4" stroke={T.border} opacity={0.25} />
-          <Tooltip content={<Tip />} cursor={{ stroke: T.border, opacity: 0.3 }} />
+          <Tooltip content={<ChartTooltip unit={unit} />} cursor={{ stroke: T.border, opacity: 0.3 }} />
           <Area
             type="natural"
             dataKey="v"
