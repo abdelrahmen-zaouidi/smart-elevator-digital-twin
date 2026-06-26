@@ -330,8 +330,55 @@ function FloorCalls({ stateRef, palette }) {
   );
 }
 
+// ── Sensors overlay: real device nodes (RFID, LCD, fan, motor probe) ─────────
+const SENSORS = [
+  { key: "rfid", label: "RFID reader", pos: [CW / 2 + 0.5, 0.8, CD / 2 + 0.15] },
+  { key: "lcd",  label: "LCD 16x4",    pos: [CW / 2 + 0.5, 1.35, CD / 2 + 0.15] },
+  { key: "fan",  label: "Cooling fan", pos: [-1.75, MACHINE_Y, 0.4] },
+  { key: "vibe", label: "Motor probe", pos: [-0.95, MACHINE_Y + 0.5, 0.2] },
+];
+
+function SensorsOverlay({ stateRef, palette, setHovered, show }) {
+  const mats = useRef({});
+  useFrame(() => {
+    if (!show) return;
+    const s = stateRef.current;
+    const sec = s.features.security.properties, fan = s.features.fan.properties, m = s.features.motor.properties;
+    const colorFor = {
+      rfid: (!sec.rfid_access_granted || num(sec.unauthorized_access_attempts) > 0 || sec.audio_distress_active) ? palette.crit : palette.ok,
+      lcd: palette.accent,
+      fan: String(fan.state).toUpperCase() === "ON" ? palette.accent : palette.idle,
+      vibe: m.health_status === "CRITICAL" ? palette.crit : m.health_status === "WARNING" ? palette.warn : palette.ok,
+    };
+    for (const k of Object.keys(mats.current)) {
+      const mat = mats.current[k];
+      if (!mat) continue;
+      const c = colorFor[k] || palette.idle;
+      mat.color.set(c); mat.emissive.set(c); mat.emissiveIntensity = 0.55;
+    }
+  });
+  if (!show) return null;
+  return (
+    <group>
+      {SENSORS.map((sensor) => (
+        <group key={sensor.key} position={sensor.pos}
+          onPointerOver={(e) => { e.stopPropagation(); setHovered(sensor.key); }}
+          onPointerOut={() => setHovered(null)}>
+          <mesh ref={(el) => { if (el) mats.current[sensor.key] = el.material; }}>
+            <boxGeometry args={[0.16, 0.16, 0.06]} />
+            <meshStandardMaterial color={palette.accent} emissive={palette.accent} emissiveIntensity={0.55} />
+          </mesh>
+          <Html position={[0, 0.22, 0]} center distanceFactor={11} pointerEvents="none">
+            <div style={hudLabel}>{sensor.label}</div>
+          </Html>
+        </group>
+      ))}
+    </group>
+  );
+}
+
 // ── Scene composition ────────────────────────────────────────────────────────
-function SceneContents({ stateRef, palette, showLabels, setHovered }) {
+function SceneContents({ stateRef, palette, showLabels, showSensors, setHovered }) {
   const sheaveRef = useRef();
   return (
     <>
@@ -346,6 +393,7 @@ function SceneContents({ stateRef, palette, showLabels, setHovered }) {
         <TractionMachine stateRef={stateRef} palette={palette} setHovered={setHovered} sheaveRef={sheaveRef} />
         <Cabin stateRef={stateRef} palette={palette} setHovered={setHovered} />
         <FloorCalls stateRef={stateRef} palette={palette} />
+        <SensorsOverlay stateRef={stateRef} palette={palette} setHovered={setHovered} show={showSensors} />
       </group>
       <OrbitControls enablePan={false} minDistance={6} maxDistance={20}
         minPolarAngle={0.35} maxPolarAngle={Math.PI / 1.9} target={[0, 0, 0]} />
@@ -365,11 +413,16 @@ const hudLabel = {
 function hoverReadout(key, s) {
   if (!key) return null;
   const c = s.features.cabin.properties, m = s.features.motor.properties, d = s.features.door.properties;
+  const sec = s.features.security.properties, fan = s.features.fan.properties;
   switch (key) {
     case "cabin": return ["Cabin", `Floor ${FLOOR_LABELS[c.current_floor] ?? "?"} -> ${FLOOR_LABELS[c.target_floor] ?? "?"} · ${c.direction} · ${Math.round(c.load_kg)}kg · ${num(c.temperature_c).toFixed(1)}degC`];
     case "motor": return ["Electric motor", `${num(m.temperature_c).toFixed(1)}degC · vib ${num(m.vibration_level).toFixed(3)}g · ${m.health_status} · ${num(m.current_draw_a).toFixed(1)}A · ${num(m.power_kw).toFixed(2)}kW`];
     case "doors": return ["Doors", `${d.state} · ${num(d.cycle_count)} cycles · ${num(d.obstruction_events)} obstructions`];
     case "counterweight": return ["Counterweight", "Balances the cabin — travels opposite"];
+    case "rfid": return ["RFID reader", `${sec.rfid_last_card || "—"} · ${sec.rfid_access_granted ? "GRANTED" : "DENIED"} · ${num(sec.unauthorized_access_attempts)} denied · alert ${sec.alert_level}`];
+    case "lcd": return ["LCD 16x4 display", `system ${s.attributes.system_mode} · risk ${Math.round(s.attributes.risk_score)}`];
+    case "fan": return ["Cooling fan", `${fan.state} (${fan.mode}) · ${fan.reason || "—"} · ${num(fan.duty_cycle_pct)}%`];
+    case "vibe": return ["Motor probe", `${num(m.temperature_c).toFixed(1)}degC · ${num(m.vibration_level).toFixed(3)}g · ${m.health_status}`];
     default: return null;
   }
 }
@@ -381,6 +434,7 @@ export default function DigitalTwinScene({ state, sendFloor, movementBlocked = f
   const [mounted, setMounted] = useState(false);
   const [palette, setPalette] = useState(readTwinPalette);
   const [showLabels, setShowLabels] = useState(true);
+  const [showSensors, setShowSensors] = useState(false);
   const [hovered, setHovered] = useState(null);
   useEffect(() => { setMounted(true); setPalette(readTwinPalette()); }, []);
 
@@ -393,7 +447,7 @@ export default function DigitalTwinScene({ state, sendFloor, movementBlocked = f
     <div style={{ position: "relative", width: "100%", height, borderRadius: 16, overflow: "hidden", border: `1px solid ${T.border}`, background: `radial-gradient(circle at 50% 18%, ${T.surfaceHi}, ${T.bg})` }}>
       {mounted && (
         <Canvas shadows dpr={[1, 2]} camera={{ position: [7, 5, 9], fov: 38 }} style={{ cursor: hovered ? "pointer" : "grab" }}>
-          <SceneContents stateRef={stateRef} palette={palette} showLabels={showLabels} setHovered={setHovered} />
+          <SceneContents stateRef={stateRef} palette={palette} showLabels={showLabels} showSensors={showSensors} setHovered={setHovered} />
         </Canvas>
       )}
 
@@ -406,6 +460,7 @@ export default function DigitalTwinScene({ state, sendFloor, movementBlocked = f
 
       {/* Top-right controls */}
       <div style={{ position: "absolute", top: 10, right: 12, display: "flex", gap: 6 }}>
+        <button type="button" onClick={() => setShowSensors(v => !v)} style={ctrlBtn(showSensors)}>Sensors</button>
         <button type="button" onClick={() => setShowLabels(v => !v)} style={ctrlBtn(showLabels)}>Labels</button>
       </div>
 
