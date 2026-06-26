@@ -9,106 +9,83 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from "recharts";
 import { Loader2, X } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Card as UICard, CardHeader, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { T } from "../../theme/tokens";
 import { riskColor, FAN_THERMAL } from "../../lib/twinConstants";
 
+// Built on the shadcn Card primitive (bg-card / border / shadow from CSS-var
+// tokens). The accent stripe + dot stay prop-driven so callers keep their API.
 export function Card({ title, accent, children, className = "", noPad = false }) {
   return (
-    <div
-      className={`rounded-2xl flex flex-col overflow-hidden transition-all ${className}`}
-      style={{
-        background: `linear-gradient(180deg, ${T.surface} 0%, ${T.surfaceLo || T.surface} 100%)`,
-        border: `1px solid ${T.border}`,
-        boxShadow: "0 16px 36px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.03)",
-      }}
+    <UICard
+      className={cn("gap-0 py-0 overflow-hidden transition-colors", className)}
+      style={accent ? { borderLeft: `3px solid ${accent}` } : undefined}
     >
       {title && (
-        <div
-          className="flex items-center justify-between gap-3 px-5 py-3"
-          style={{
-            borderBottom: `1px solid ${T.border}`,
-            borderLeft: accent ? `4px solid ${accent}` : "4px solid transparent",
-            background: accent ? `linear-gradient(90deg, ${accent}22, rgba(255,255,255,0.015))` : T.surface,
-            transition: "all 0.2s ease",
-          }}
-        >
-          <span className="text-xs font-semibold tracking-wide uppercase" style={{ color: accent || T.textSub, letterSpacing: "0.1em" }}>
+        <CardHeader className="flex flex-row items-center justify-between gap-3 px-5 py-3 border-b [.border-b]:pb-3">
+          <span
+            className="text-xs font-semibold tracking-wider uppercase text-muted-foreground"
+            style={accent ? { color: accent } : undefined}
+          >
             {title}
           </span>
-          <span style={{ width: 6, height: 6, borderRadius: 999, background: accent || T.border, boxShadow: accent ? `0 0 14px ${accent}` : undefined }} />
-        </div>
+          <span className="size-1.5 rounded-full bg-border" style={accent ? { background: accent } : undefined} />
+        </CardHeader>
       )}
-      <div className={`flex-1 ${noPad ? "" : "p-5"}`}>{children}</div>
-    </div>
+      <CardContent className={noPad ? "px-0" : "p-5"}>{children}</CardContent>
+    </UICard>
   );
 }
 
-/** KPI metric tile */
+/** KPI metric tile (token-based surface) */
 export function KpiTile({ label, value, unit, color, sub }) {
   return (
-    <div
-      className="rounded-2xl p-4 flex flex-col gap-2 transition-all"
-      style={{
-        background: `linear-gradient(160deg, ${T.surfaceHi}, ${T.surface})`,
-        border: `1px solid ${T.border}`,
-        boxShadow: "0 14px 28px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.03)",
-      }}
-    >
-      <div className="text-xs font-semibold tracking-wide uppercase" style={{ color: T.textMute, letterSpacing: "0.08em" }}>
+    <div className="rounded-xl p-4 flex flex-col gap-2 bg-card border border-border shadow-sm">
+      <div className="text-xs font-semibold tracking-wide uppercase text-muted-foreground">
         {label}
       </div>
       <div className="flex items-baseline gap-2">
-        <span className="text-2xl font-bold font-mono tabular-nums" style={{ color: color || T.text }}>
+        <span className="text-2xl font-bold font-mono tabular-nums text-foreground" style={color ? { color } : undefined}>
           {value}
         </span>
-        {unit && <span className="text-xs font-mono" style={{ color: T.textMute }}>
-          {unit}
-        </span>}
+        {unit && <span className="text-xs font-mono text-muted-foreground">{unit}</span>}
       </div>
-      {sub && <div className="text-xs font-mono" style={{ color: T.textMute }}>
-        {sub}
-      </div>}
+      {sub && <div className="text-xs font-mono text-muted-foreground">{sub}</div>}
     </div>
   );
 }
 
-/** Pill badge for system modes and statuses */
+/** Pill badge for system modes and statuses (shadcn Badge + dynamic colour) */
 export function StatusPill({ label, color, pulse = false }) {
   return (
-    <span
-      className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold tracking-wide uppercase transition-all"
-      style={{
-        color,
-        background: color === T.green ? T.greenDim : color === T.yellow ? T.yellowDim : color === T.red ? T.redDim : T.blueDim,
-        border: `1px solid ${color}40`,
-        boxShadow: pulse ? `0 0 8px ${color}30` : undefined,
-      }}
+    <Badge
+      variant="outline"
+      className="gap-1.5 rounded-full px-3 py-1 text-xs font-semibold tracking-wide uppercase"
+      style={{ color, borderColor: `${color}55`, background: `${color}1f` }}
     >
       <span
-        className="w-2 h-2 rounded-full inline-block"
-        style={{
-          background: color,
-          animation: pulse ? "pulse 2s ease-in-out infinite" : undefined,
-        }}
+        className="size-2 rounded-full inline-block"
+        style={{ background: color, animation: pulse ? "pulse 2s ease-in-out infinite" : undefined }}
       />
       {label}
-    </span>
+    </Badge>
   );
 }
 
-/** Severity badge */
+/** Severity badge (shadcn Badge + semantic status tokens) */
 export function SevBadge({ sev }) {
-  const cfg = { CRITICAL: T.red, WARNING: T.yellow, INFO: T.blue, NORMAL: T.green };
-  const c = cfg[sev] || T.textSub;
-  const bgCfg = { CRITICAL: T.redDim, WARNING: T.yellowDim, INFO: T.blueDim, NORMAL: T.greenDim };
-  const bg = bgCfg[sev] || T.surfaceHi;
+  const cls = {
+    CRITICAL: "bg-crit-soft text-crit border-crit/30",
+    WARNING:  "bg-warn-soft text-warn border-warn/30",
+    INFO:     "bg-info-soft text-info border-info/30",
+    NORMAL:   "bg-ok-soft text-ok border-ok/30",
+  }[sev] || "bg-muted text-muted-foreground border-border";
   return (
-    <span
-      className="px-2.5 py-1 rounded-md text-xs font-semibold tracking-wide uppercase"
-      style={{ color: c, background: bg, border: `1px solid ${c}30` }}
-    >
+    <Badge variant="outline" className={cn("rounded-md px-2.5 py-1 text-xs font-semibold tracking-wide uppercase", cls)}>
       {sev}
-    </span>
+    </Badge>
   );
 }
 
@@ -127,12 +104,12 @@ export function EmptyState({ title = "No data", detail = "Waiting for telemetry 
   );
 }
 
-export function FieldTile({ label, value, color = T.textSub, sub }) {
+export function FieldTile({ label, value, color, sub }) {
   return (
-    <div style={{ padding: "10px 12px", borderRadius: 12, background: T.surfaceHi, border: `1px solid ${T.border}` }}>
-      <div style={{ fontSize: 10, color: T.textMute, marginBottom: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>{label}</div>
-      <div style={{ fontSize: 15, color, fontWeight: 800, fontFamily: "ui-monospace, SFMono-Regular, Consolas, monospace" }}>{value}</div>
-      {sub && <div style={{ color: T.textMute, fontSize: 10, marginTop: 3 }}>{sub}</div>}
+    <div className="rounded-lg px-3 py-2.5 bg-muted border border-border">
+      <div className="text-[10px] text-muted-foreground mb-1 tracking-wide uppercase">{label}</div>
+      <div className="text-[15px] font-extrabold font-mono text-foreground" style={color ? { color } : undefined}>{value}</div>
+      {sub && <div className="text-[10px] text-muted-foreground mt-1">{sub}</div>}
     </div>
   );
 }

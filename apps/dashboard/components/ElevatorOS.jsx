@@ -4233,6 +4233,15 @@ export default function ElevatorOS() {
 
   applyThemeTokens(preferences.theme);
 
+  // Keep the shadcn CSS-variable tokens (the .dark class) in sync with the app
+  // theme so the token-based primitives match the legacy T-based components.
+  useEffect(() => {
+    const root = document.documentElement;
+    const dark = preferences.theme !== "light";
+    root.classList.toggle("dark", dark);
+    root.classList.toggle("light", !dark);
+  }, [preferences.theme]);
+
   useEffect(() => {
     try {
       const stored = window.localStorage.getItem("eos-session") || window.sessionStorage.getItem("eos-session");
