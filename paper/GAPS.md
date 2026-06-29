@@ -1,6 +1,17 @@
 # Submission Gaps Checklist
 
-This file tracks every placeholder and unresolved submission task in `main.tex`.
+This file tracks placeholders and unresolved submission tasks in `main.tex`.
+
+> **Status (2026-06-29).** The submission scaffolding (`[MEASURE]` tags, the
+> "required before submission" column, gap self-narration) has been removed from
+> the PDF and reframed as Future Work. Measured now and written into the paper:
+> **M4** safety-gate decision time, **M7** dispatch decision time, the
+> in-process **cost of safety**, and **M2** MQTT RTT (see
+> `evidence/perf/` and `scripts/measurement/README.md`). Still needing the live
+> stack or the physical board: **M1, M3, M6** (stack) and **M8, M9** (board) —
+> ready-to-run scripts/instructions are in `scripts/measurement/`. Author e-mails
+> and the lab name are resolved in `main.tex`; the remaining author-only items
+> are listed under "Section Tasks" below and as `% TODO(human)` markers.
 
 ## Required Measurements
 

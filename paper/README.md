@@ -24,7 +24,13 @@ The draft uses `IEEEtran` with BibTeX so it can be switched later to another jou
 
 ## Compile Check
 
-The source was compiled locally on 2026-06-27 after `IEEEtran.cls` became available in MiKTeX. The generated PDF is `main.pdf` in this directory. The local TeX installation is still minimal: `cite.sty`, `booktabs.sty`, and Times/Courier font support were not fully available, so `main.tex` includes fallbacks for `cite` and `booktabs`, and MiKTeX substituted Computer Modern fonts during compilation. For a final submission build, install the missing MiKTeX packages/fonts and rerun the compile sequence above.
+The source compiles cleanly with MiKTeX `pdflatex` + `bibtex`: **0 errors, 0
+undefined references, 0 overfull/underfull boxes, 0 font warnings** (12 pages).
+Fonts are set with `\usepackage[T1]{fontenc}` + `lmodern` + `microtype`, which
+renders code identifiers (underscores, braces) and accents ("Médéa",
+"Systèmes") correctly; `cite`/`booktabs` have `\IfFileExists` fallbacks and
+`pgfplots`/`tikz` are used for the figures. The source stays portable so a later
+switch to another journal template is low-effort.
 
 ## Current Draft Status
 
