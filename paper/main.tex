@@ -17,8 +17,11 @@
 \usepackage{url}
 \usepackage{xcolor}
 \IfFileExists{microtype.sty}{\usepackage{microtype}}{}
+\usepackage{graphicx}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning,fit,backgrounds}
+\IfFileExists{pgfplots.sty}{\usepackage{pgfplots}\pgfplotsset{compat=1.16}}{}
+\graphicspath{{figures/}}
 
 \newcolumntype{Y}{>{\raggedright\arraybackslash}X}
 \newcommand{\artifact}[1]{\texttt{#1}}
@@ -123,15 +126,31 @@ LLM / multi-agent automation \cite{xi2023llmAgents,wang2024llmAgents} & -- & P &
 
 \subsection{Layered Stack}
 
-The implemented stack follows a forward data-and-control flow and a reverse command path:
-\begin{equation*}
-\begin{aligned}
-\text{data:}\quad &\mathrm{ESP32} \to \mathrm{MQTT} \to \mathrm{Bridge} \to \mathrm{Ditto} \\
-&\to \mathrm{Dashboard/Agents/DB},\\[2pt]
-\text{command:}\quad &\mathrm{Dashboard/Agent} \to \mathrm{Gate} \to \mathrm{Ditto\ intent} \\
-&\to \mathrm{Bridge} \to \mathrm{MQTT} \to \mathrm{Device}.
-\end{aligned}
-\end{equation*}
+The implemented stack is organized as the layered architecture of Fig.~\ref{fig:architecture}: telemetry flows up from the field to the state authority and its consumers, while every command flows down only through the deterministic safety gate.
+
+\begin{figure*}[t]
+\centering
+\begin{tikzpicture}[
+  font=\footnotesize,
+  band/.style={draw, rounded corners=2pt, text width=0.78\textwidth, align=center,
+               minimum height=8mm, inner sep=3pt},
+  node distance=2.6mm,
+  >={Latex[length=2.4mm]},
+]
+\node[band] (pres) {\textbf{Presentation} --- Next.js SCADA dashboard (server-side API routes; no direct MQTT)};
+\node[band, below=of pres] (agent) {\textbf{Agents} --- n8n surveillance, analysis, control, security/maintenance, notification, optimization, audit $+$ adaptive dispatch engine (Brain~A active, Brain~B shadow)};
+\node[band, below=of agent, very thick] (state) {\textbf{State \& history} --- Eclipse Ditto: Thing \texttt{building:floor1:elevator} (attributes $+$ features; intent vs.\ device-applied) \quad$\cdot$\quad PostgreSQL/TimescaleDB: history, audit, decisions};
+\node[band, below=of state] (integ) {\textbf{Integration} --- Node.js bridge: MQTT$\leftrightarrow$Ditto, change suppression, command-intent reconciliation};
+\node[band, below=of integ] (trans) {\textbf{Transport} --- Eclipse Mosquitto: per-identity auth, ACLs, TLS (8883); topics \texttt{telemetry}/\texttt{events}/\texttt{status}/\texttt{commands}};
+\node[band, below=of trans] (field) {\textbf{Field} --- ESP32-S3 prototype $+$ authenticated simulator: finite-state machine, firmware interlocks};
+\draw[->] ([xshift=-4mm]field.south west) -- ([xshift=-4mm]pres.north west)
+  node[midway, rotate=90, anchor=south, font=\scriptsize]{telemetry / events / status};
+\draw[->] ([xshift=4mm]pres.south east) -- ([xshift=4mm]field.north east)
+  node[midway, rotate=90, anchor=north, font=\scriptsize]{commands via safety gate (Fig.~\ref{fig:command-path})};
+\end{tikzpicture}
+\caption{Layered architecture. Telemetry flows up from the field to the state authority and its consumers; every command flows down only through the deterministic safety gate of Fig.~\ref{fig:command-path}. Eclipse Ditto, not the dashboard, is the operational source of truth.}
+\label{fig:architecture}
+\end{figure*}
 
 The physical layer is a reduced-scale four-floor, single-cabin prototype controlled by ESP32-S3 firmware. The communication layer uses Mosquitto with JSON topics \topicbase\artifact{telemetry}, \topicbase\artifact{events}, \topicbase\artifact{status}, and \topicbase\artifact{commands}. The twin layer is Eclipse Ditto, accessed through \artifact{/api/2/things/\{thingId\}}. The history layer is PostgreSQL/TimescaleDB. The agent layer consists of n8n workflows and a dispatch engine. The presentation layer is the Next.js SCADA dashboard.
 
@@ -231,7 +250,15 @@ Optimization/audit agent & Dispatch cycle or audit event. & Record dispatch deci
 
 \subsection{Prototype and Firmware}
 
-Table~\ref{tab:prototype-specs} summarizes the physical prototype. The ESP32-S3 was selected for Wi-Fi connectivity, GPIO, ADC, SPI/I2C, timers, PWM-capable pins, and sufficient memory for MQTT/TLS operation in a laboratory prototype \cite{espressifEsp32S3Datasheet,espidfMqttClient}. The deployed firmware implements a finite-state machine with idle, door-opening, door-wait, door-closing, moving-up, moving-down, arrival, error-stop, and emergency states. Remote commands are not direct GPIO operations; they are parsed into state-machine requests and checked against firmware-side interlocks.
+Table~\ref{tab:prototype-specs} summarizes the physical prototype, shown in Fig.~\ref{fig:prototype}. The ESP32-S3 was selected for Wi-Fi connectivity, GPIO, ADC, SPI/I2C, timers, PWM-capable pins, and sufficient memory for MQTT/TLS operation in a laboratory prototype \cite{espressifEsp32S3Datasheet,espidfMqttClient}.
+
+\begin{figure}[t]
+\centering
+% TODO(human): confirm permission to publish this prototype photograph.
+\includegraphics[width=0.92\columnwidth]{prototype.jpg}
+\caption{Reduced-scale four-floor, single-cabin ESP32-S3 elevator prototype (annotated). Temperature, vibration, and load are simulated through ADC potentiometers; KY-024 and SPDT switches are mounted provisions only, not validated in the deployed firmware. \textit{Pending author permission to publish.}}
+\label{fig:prototype}
+\end{figure} The deployed firmware implements a finite-state machine with idle, door-opening, door-wait, door-closing, moving-up, moving-down, arrival, error-stop, and emergency states. Remote commands are not direct GPIO operations; they are parsed into state-machine requests and checked against firmware-side interlocks.
 
 \begin{table}[t]
 \caption{Reduced-scale elevator prototype characteristics}
@@ -260,7 +287,7 @@ The firmware publishes JSON telemetry to \artifact{elevator/\mqttid/telemetry}, 
 
 \subsection{MQTT Security Baseline}
 
-The broker disables anonymous access and uses per-client identities: \artifact{esp32-elevator}, \artifact{bridge}, \artifact{agents}, \artifact{dashboard}, and \artifact{healthcheck}. The ESP32 identity publishes only its telemetry, events, and status and subscribes only to its commands. The dashboard identity is read-only for diagnostics and cannot publish command topics. The bridge identity can publish device commands after Ditto intent is accepted. The security evidence package shows anonymous and wrong-password connections rejected with \artifact{not authorised}, while an authenticated bridge subscriber received telemetry. A separate TLS evidence capture on port 8883 confirms successful publish/subscribe over the ESP32-side TLS listener, but does not report RTT in milliseconds.
+The broker disables anonymous access and uses per-client identities: \artifact{esp32-elevator}, \artifact{bridge}, \artifact{agents}, \artifact{dashboard}, and \artifact{healthcheck}. The ESP32 identity publishes only its telemetry, events, and status and subscribes only to its commands. The dashboard identity is read-only for diagnostics and cannot publish command topics. The bridge identity can publish device commands after Ditto intent is accepted. The security evidence package shows anonymous and wrong-password connections rejected with \artifact{not authorised}, while an authenticated bridge subscriber received telemetry. A separate field TLS evidence capture on port 8883 confirms successful publish/subscribe over the ESP32-side TLS listener; the steady-state TLS round-trip time was measured separately on a loopback broker (Section~\ref{sec:eval}).
 
 The topic convention is deliberately narrow. Periodic telemetry carries feature-shaped JSON snapshots; events carry discrete safety, security, and maintenance incidents; status carries retained presence; and commands are cloud-to-device messages produced only by authorized backend identities. This separation allows ACLs to express operational authority: an ESP32 credential can never publish commands, and a dashboard credential can never bypass the server-side command API. In a multi-building deployment, the same convention extends through Thing IDs and MQTT-safe identifiers without changing the UI control model.
 
@@ -272,7 +299,24 @@ The reverse path is implemented through Ditto Server-Sent Events plus a polling 
 
 \subsection{Ditto Thing Model and Persistence}
 
-The default Thing ID is \thingid, mapped to MQTT-safe ID \mqttid. Attributes store metadata and fleet-level status, while features represent subsystems such as \artifact{cabin}, \artifact{door}, \artifact{motor}, \artifact{security}, \artifact{fan}, \artifact{microcontroller}, \artifact{control}, \artifact{energy}, \artifact{performance}, \artifact{ai\_analysis}, \artifact{predicted\_failures}, and \artifact{maintenance\_schedule}. The \artifact{control} feature separates command intent from device-applied state. For dispatch, \artifact{control.dispatch\_policy} is the authoritative intent selected by the engine, while \artifact{control.device\_applied\_policy} is reported by the firmware or simulator.
+The default Thing ID is \thingid, mapped to MQTT-safe ID \mqttid. Attributes store metadata and fleet-level status, while features represent subsystems such as \artifact{cabin}, \artifact{door}, \artifact{motor}, \artifact{security}, \artifact{fan}, \artifact{microcontroller}, \artifact{control}, \artifact{energy}, \artifact{performance}, \artifact{ai\_analysis}, \artifact{predicted\_failures}, and \artifact{maintenance\_schedule} (Fig.~\ref{fig:ditto-model}). The \artifact{control} feature separates command intent from device-applied state. For dispatch, \artifact{control.dispatch\_policy} is the authoritative intent selected by the engine, while \artifact{control.device\_applied\_policy} is reported by the firmware or simulator.
+
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[font=\footnotesize,
+  blk/.style={draw, rounded corners=2pt, align=left, inner sep=3pt, text width=0.84\columnwidth},
+  node distance=1.8mm,
+]
+\node[blk, fill=black!5] (thing) {\textbf{Thing} \texttt{building:floor1:elevator}};
+\node[blk, below=of thing] (attr) {\textbf{Attributes} (slowly varying metadata): fleet status, \texttt{system\_mode}, \texttt{risk\_score}};
+\node[blk, below=of attr] (feat) {\textbf{Features} (subsystem state): \texttt{cabin}, \texttt{door}, \texttt{motor}, \texttt{security}, \texttt{fan}, \texttt{microcontroller}, \texttt{energy}, \texttt{performance}, \texttt{ai\_analysis}, \texttt{predicted\_failures}, \texttt{maintenance\_schedule}};
+\node[blk, below=of feat, very thick] (ctrl) {\textbf{Feature} \texttt{control} --- separates intent from applied state:\\
+\hspace*{1em}intent: \texttt{pending\_command}, \texttt{dispatch\_policy}\\
+\hspace*{1em}device-applied: \texttt{device\_applied\_policy}};
+\end{tikzpicture}
+\caption{Eclipse Ditto Thing model. Attributes hold slowly varying metadata; features hold subsystem state. The \texttt{control} feature explicitly separates command \emph{intent} from \emph{device-applied} state---the property that lets a rejected command leave the twin unchanged.}
+\label{fig:ditto-model}
+\end{figure}
 
 PostgreSQL/TimescaleDB stores raw telemetry, audit events, command decisions, notifications, maintenance work orders, system health records, and dispatch decisions. The final evidence export records seven application tables and 19,901 rows in \artifact{telemetry\_raw} as of 2026-06-13 02:07:12.
 
@@ -348,11 +392,20 @@ Policy or override & Role \\
 
 \subsection{SCADA Dashboard}
 
-The Next.js dashboard reads Ditto through server-side APIs and history routes. Dynamic values are handled in client hooks to avoid SSR hydration errors. The dashboard command center posts to \artifact{/api/commands}; it does not publish MQTT commands. This preserves separation between UI, logic, state, and device transport.
+The Next.js dashboard reads Ditto through server-side APIs and history routes (Fig.~\ref{fig:dashboard}). Dynamic values are handled in client hooks to avoid SSR hydration errors. The dashboard command center posts to \artifact{/api/commands}; it does not publish MQTT commands. This preserves separation between UI, logic, state, and device transport.
+
+\begin{figure}[t]
+\centering
+% TODO(human): confirm permission to publish this dashboard screenshot.
+\includegraphics[width=\columnwidth]{dashboard_command_center.png}
+\caption{SCADA command center. Operator commands post to \artifact{/api/commands} and pass the deterministic safety gate; recent command decisions and their accept/reject reasons are shown. \textit{Pending author permission to publish.}}
+\label{fig:dashboard}
+\end{figure}
 
 The dashboard is therefore not a thin MQTT client. Its pages surface the live twin, historical telemetry, risk analysis, maintenance state, security state, command decisions, and dispatch policy. The server-side routes hide Ditto and database credentials from the browser and make the command path uniform for operator and workflow-originated requests. The current authentication boundary is prototype-level; production hardening requires server-side sessions, OIDC or equivalent identity management, role-based access control, HTTPS, and audit-linked user identities.
 
 \section{Validation and Evaluation}
+\label{sec:eval}
 
 \subsection{Evidence Policy}
 
@@ -375,7 +428,7 @@ Subsystem & Status & Evidence & Boundary \\
 \midrule
 MQTT topic convention & PASS & \artifact{evidence/mqtt/topic\_validator\_output.txt}: scanned 266 files, no unexpected legacy topic patterns, expected canonical topics present. & Software/configuration evidence. \\
 MQTT authentication and ACLs & PASS & \artifact{acl\_security\_tests.txt}: anonymous and wrong-password connections denied; authenticated bridge subscriber received telemetry. & Broker-side evidence. \\
-TLS publish/subscribe & PASS & Workspace \artifact{evidence/mqtt/05-roundtrip-tls.txt}: TLS publish exit 0 and subscriber receive exit 0 on 8883. & No RTT in ms captured. \\
+TLS publish/subscribe & PASS & Workspace \artifact{evidence/mqtt/05-roundtrip-tls.txt}: TLS publish exit 0 and subscriber receive exit 0 on 8883. & Field RTT not timed; loopback RTT in Table~\ref{tab:metrics}. \\
 Bridge and Ditto sync & PASS & \artifact{bridge\_logs.txt} and Ditto Thing export show twin merges, online status, command-intent forwarding. & Software-stack evidence. \\
 Command safety gate & PASS & \artifact{command\_safety\_gate\_test\_output.txt}: 33/33 assertions; live command rows show rejected commands with \artifact{SKIPPED} writes. & Deterministic software gate. \\
 Dispatch engine & PASS & 61/61 dispatch assertions across policy, safety, orchestrator, Brain B, and evaluation suites. & Brain B remains shadow-only. \\
@@ -425,12 +478,40 @@ ESP32 resource usage & No heap, CPU, or loop-timing capture (requires the physic
 
 The deterministic decision paths were microbenchmarked in-process over 20{,}000 samples per class on a single host, with per-call timing from \artifact{process.hrtime}; the raw distribution is archived in \artifact{evidence/perf/decision-latency.json}. The safety gate evaluates an accepted command in a median of 5.7~$\mu$s and a rejected command in 4.4--5.6~$\mu$s, with the 99th percentile below 20~$\mu$s. The active Brain~A dispatch decision takes a median of 15.6~$\mu$s from the twin snapshot, and the full orchestrator loop---context construction, decision, gate preview, and command assembly---completes in a median of 22.4~$\mu$s. These are CPU times of the decision logic, distinct from the test-suite durations reported by the runner, and they must not be read as end-to-end command latency, which additionally crosses the network, Ditto, and the device and remains future work. The deterministic admission adds only about 5.3~$\mu$s of computation per command relative to a direct dashboard-to-MQTT serialization: the cost of the safety discipline is architectural rather than a measurable performance penalty. Transport latency was measured separately over a loopback broker (\artifact{evidence/perf/mqtt-rtt.txt}): the steady-state MQTT round-trip is a median of 1.11~ms on the plain listener and 1.19~ms over the TLS listener (QoS~1, 500 samples each), confirming that the encrypted hop adds negligible per-message overhead once the handshake is established.
 
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=\columnwidth, height=4.8cm,
+  xlabel={Safety-gate decision time ($\mu$s)},
+  ylabel={cumulative fraction},
+  xmin=5, xmax=25, ymin=0, ymax=1,
+  ytick={0,0.25,0.5,0.75,0.95,1},
+  grid=both, grid style={gray!18},
+  tick label style={font=\scriptsize}, label style={font=\footnotesize},
+]
+\addplot[blue!70!black, very thick, const plot] table[x=lat, y=frac] {figures/gate-latency-ecdf.dat};
+\draw[dashed, gray!70] (axis cs:5.7,0) -- (axis cs:5.7,0.5) -- (axis cs:5,0.5);
+\draw[dashed, gray!70] (axis cs:9.5,0) -- (axis cs:9.5,0.95) -- (axis cs:5,0.95);
+\node[font=\scriptsize, anchor=west] at (axis cs:6.2,0.30) {median 5.7\,$\mu$s};
+\node[font=\scriptsize, anchor=west] at (axis cs:10,0.80) {p95 9.5\,$\mu$s};
+\end{axis}
+\end{tikzpicture}
+\caption{Empirical CDF of the deterministic safety-gate decision time over 20{,}000 accepted-command evaluations (x clipped at 25~$\mu$s; p99 is 19.6~$\mu$s). The gate decides in single-digit microseconds, so routing every command through it is essentially free.}
+\label{fig:latency}
+\end{figure}
+
 \subsection{Security Results}
 
 The broker evidence demonstrates deny-by-default authentication behavior: anonymous and wrong-password clients were rejected, while an authenticated bridge identity received telemetry. The ACL model also separates device and dashboard identities from command publication. This is stronger than a demo-only anonymous MQTT broker, but it remains a laboratory baseline. Production deployment would require credential rotation, certificate lifecycle management, network segmentation, service-to-service TLS, HTTPS for the dashboard and Ditto, secret management, and role-separated Ditto policies.
 
 Table~\ref{tab:threat-model} summarizes the threat model covered by the prototype. The table is not a complete industrial security certification; it is an engineering boundary for a local research deployment.
 
+% TODO(human): Table~\ref{tab:threat-model} (threat model) and Table~\ref{tab:future-hardening}
+% (limitations -> hardening) overlap substantially -- the security rows of each
+% restate the other. Recommend merging the security-specific rows into one table
+% and/or moving the threat model to an appendix to save ~half a page. Left intact
+% pending your decision (this is a delete/merge action).
 \begin{table*}[t]
 \caption{Concise threat model and mitigation boundary}
 \label{tab:threat-model}
