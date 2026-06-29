@@ -17,6 +17,8 @@
 \usepackage{url}
 \usepackage{xcolor}
 \IfFileExists{microtype.sty}{\usepackage{microtype}}{}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds}
 
 \newcolumntype{Y}{>{\raggedright\arraybackslash}X}
 \newcommand{\artifact}[1]{\texttt{#1}}
@@ -30,11 +32,12 @@
 
 \author{Zaouidi~Abderrahmane,
         Bengherbia~Mohamed~Hachem,
-        and Mounir~Bouhedda%
-% TODO(human): confirm official lab name + accents. The acronym ``LSEA'' does not match ``Laboratoire Signaux et Syst\`emes'' (that would be LSS); provide the correct expansion.
-\thanks{The authors are with the Laboratoire Signaux et Syst\`emes (LSEA), University of M\'ed\'ea, M\'ed\'ea, Algeria.}%
-% TODO(human): insert real corresponding-author e-mail addresses (do not invent).
-\thanks{Corresponding authors: Zaouidi Abderrahmane and Mounir Bouhedda. E-mails: [AUTHOR EMAIL], [SENIOR AUTHOR EMAIL].}}
+        and~Mounir~Bouhedda%
+% TODO(human): confirm the official lab name. ``LSEA'' matches the French
+% ``Laboratoire des Syst\`emes \'Electroniques Avanc\'es''; the English
+% expansion below is provided for convenience.
+\thanks{The authors are with the Laboratory of Advanced Electronic Systems (LSEA), University of M\'ed\'ea, M\'ed\'ea, Algeria.}%
+\thanks{Corresponding authors: Zaouidi Abderrahmane, Bengherbia Mohamed Hachem, and Bouhedda Mounir. E-mails: abdelrahmenzaouidi@gmail.com, Mohamed.bengherbia26@gmail.com, bouhedda.mounir@univ-medea.dz.}}
 
 \markboth{Draft journal article prepared from the master's thesis, June 2026}%
 {Zaouidi \MakeLowercase{\textit{et al.}}: Safety-Gated Agentic Digital Twin Architecture}
@@ -113,7 +116,7 @@ Table~\ref{tab:responsibility-boundaries} records the responsibility boundary th
 \label{tab:responsibility-boundaries}
 \centering
 \footnotesize
-\begin{tabularx}{\textwidth}{@{}p{0.16\textwidth}p{0.22\textwidth}Yp{0.18\textwidth}@{}}
+\begin{tabularx}{\textwidth}{@{}p{0.17\textwidth}p{0.21\textwidth}Yp{0.18\textwidth}@{}}
 \toprule
 Layer & Owns & Must not own & Reliability/security rationale \\
 \midrule
@@ -130,38 +133,41 @@ Next.js SCADA dashboard & Operator visualization, history views, command-request
 
 \begin{figure*}[t]
 \centering
-\setlength{\fboxsep}{6pt}
-\fbox{%
-\begin{minipage}{0.96\textwidth}
-\centering
-\footnotesize
-\begin{tabular}{>{\centering\arraybackslash}p{0.12\textwidth}
-                >{\centering\arraybackslash}p{0.12\textwidth}
-                >{\centering\arraybackslash}p{0.12\textwidth}
-                >{\centering\arraybackslash}p{0.12\textwidth}
-                >{\centering\arraybackslash}p{0.12\textwidth}
-                >{\centering\arraybackslash}p{0.12\textwidth}
-                >{\centering\arraybackslash}p{0.12\textwidth}}
-\textbf{Operator or agent} &
-\textbf{Dashboard API} &
-\textbf{Deterministic safety gate} &
-\textbf{Audit and database} &
-\textbf{Ditto command intent} &
-\textbf{Bridge} &
-\textbf{MQTT device topic} \\
-\artifact{POST /api/commands} &
-fetch live twin state &
-allow-list, source, reason, confirmation, risk, mode, freshness &
-\artifact{control\_command\_log} and \artifact{audit\_log} &
-\artifact{control.pending\_command} &
-SSE or poller reconciles accepted intent &
-\artifact{elevator/\{id\}/commands}
-\end{tabular}
-
-\vspace{3pt}
-$\Downarrow$ firmware/simulator local interlocks: floor bounds, emergency stop, overload, door state, lockout, malformed command rejection
-\end{minipage}}
-\caption{Safety-gated command path. The browser, workflows, and optional LLM never publish device commands directly. Accepted intent is persisted in Ditto and forwarded by the bridge; rejected commands produce no Ditto writes.}
+\begin{tikzpicture}[
+  font=\footnotesize,
+  >={Latex[length=2mm]},
+  box/.style={draw, rounded corners=2pt, align=center, text width=18mm,
+              minimum height=12mm, inner sep=2pt},
+  gate/.style={box, very thick},
+  term/.style={box, text width=22mm},
+  lbl/.style={font=\scriptsize\itshape, inner sep=1.5pt},
+  node distance=5.5mm and 5.5mm,
+]
+% main accept pipeline (left to right)
+\node[box] (op) {Operator or agent};
+\node[box, right=of op] (api) {Dashboard API\\\texttt{POST}\\\texttt{/api/commands}};
+\node[gate, right=of api] (gate) {Deterministic\\safety gate};
+\node[box, right=of gate] (ditto) {Ditto intent\\\texttt{control.}\\\texttt{pending\_command}};
+\node[box, right=of ditto] (bridge) {Bridge\\(SSE / poller)};
+\node[box, right=of bridge] (mqtt) {MQTT topic\\\texttt{elevator/}\\\texttt{\{id\}/commands}};
+\node[term, right=of mqtt] (dev) {Firmware / simulator interlocks};
+\draw[->] (op) -- (api);
+\draw[->] (api) -- (gate);
+\draw[->] (gate) -- node[above, lbl] {accept} (ditto);
+\draw[->] (ditto) -- (bridge);
+\draw[->] (bridge) -- (mqtt);
+\draw[->] (mqtt) -- (dev);
+% reject branch (downward from the gate)
+\node[term, below=9mm of gate] (reject)
+  {Reject: \texttt{control\_command\_log} $+$ \texttt{audit\_log} written,\\
+   \texttt{ditto\_write\_status\,=\,SKIPPED} (zero Ditto write)};
+\draw[->] (gate) -- node[right, lbl] {reject} (reject);
+% interlock note under device
+\node[lbl, below=4mm of dev, text width=24mm, align=center] (lock)
+  {floor bounds, e-stop, overload, door, lockout};
+\draw[->, dashed] (dev) -- (lock);
+\end{tikzpicture}
+\caption{Safety-gated command path. The browser, workflows, and optional LLM never publish device commands directly. Accepted intent is persisted as Ditto command intent and forwarded by the bridge; rejected commands are logged for audit but produce zero Ditto writes (\texttt{ditto\_write\_status\,=\,SKIPPED}). The firmware or simulator applies local interlocks before actuation.}
 \label{fig:command-path}
 \end{figure*}
 
@@ -251,15 +257,16 @@ The use of both Ditto and PostgreSQL is intentional. Ditto answers ``what is the
 The command safety gate is implemented in the shared JavaScript package and mirrored in the n8n control workflow. It validates command allow-list, required fields, source, source agent, reason, confirmation, system mode, emergency stop, door state, overload, forced entry, risk threshold, target floor bounds, twin freshness, duplicate cooldown, dispatch-policy validity, and Ditto availability. If any mandatory predicate fails, the decision is persisted as rejected, \artifact{ditto\_write\_status} is \artifact{SKIPPED}, and the planned Ditto write list is empty.
 
 \begin{equation}
-\begin{split}
-accepted(c) ={}& allowlisted(c) \land valid(c) \land authorized(c) \\
-& \land fresh(T) \land safeMode(T) \land safeInterlocks(T) \\
-& \land riskWithinLimit(c,T) \land dittoReachable .
-\end{split}
 \label{eq:gate}
+\begin{aligned}
+\operatorname{accept}(c,T) ={}& \operatorname{allowlisted}(c) \wedge \operatorname{valid}(c) \\
+&{}\wedge \operatorname{authorized}(c) \wedge \operatorname{fresh}(T) \\
+&{}\wedge \operatorname{safeMode}(T) \wedge \operatorname{safeInterlocks}(T) \\
+&{}\wedge \operatorname{riskWithinLimit}(c,T) \wedge \operatorname{dittoReachable}(T).
+\end{aligned}
 \end{equation}
 
-Equation~\eqref{eq:gate} is a compact representation of the admission logic; the implementation records all rejection reasons rather than returning only the first failure.
+Here $c$ is the requested command and $T$ the current twin snapshot. The predicates correspond directly to the checks above: $\operatorname{allowlisted}$ and $\operatorname{valid}$ test the command catalog and required fields; $\operatorname{authorized}$ tests source, source agent, reason, and human confirmation; $\operatorname{fresh}$ requires a recent twin; $\operatorname{safeMode}$ excludes unsafe system modes; $\operatorname{safeInterlocks}$ tests emergency stop, door state, overload, and forced entry; $\operatorname{riskWithinLimit}$ bounds the risk score and target-floor range; and $\operatorname{dittoReachable}$ requires the twin store to be writable. A command is admitted only if all predicates hold; the implementation records all failing predicates rather than returning only the first failure.
 
 Table~\ref{tab:gate-rules} lists the principal rule families. The final software evidence confirms that rejected decisions carry no Ditto writes. In the live command-path run, this property was not only unit-tested but also observed in database rows: every rejected command had \artifact{ditto\_write\_status = SKIPPED}.
 
@@ -471,7 +478,7 @@ The artifact bundle will be made available at \artifact{<repository URL or DOI>}
 
 \section*{Author Contributions (CRediT)}
 
-Zaouidi Abderrahmane: conceptualization of the software architecture, methodology, software, system integration, validation, investigation, visualization, data curation, and original draft preparation. Bengherbia Mohamed Hachem: implementation support, technical review, validation support, and manuscript review. Mounir Bouhedda: original research idea, supervision, project administration, methodology guidance, and manuscript review and editing.
+Zaouidi Abderrahmane: conceptualization of the software architecture, methodology, software, system integration, validation, investigation, visualization, data curation, and original draft preparation. Bengherbia Mohamed Hachem: implementation support, technical review, validation support, and manuscript review. Bouhedda Mounir: original research idea, supervision, project administration, methodology guidance, and manuscript review and editing.
 
 \section*{Acknowledgment}
 
