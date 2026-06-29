@@ -1,0 +1,23 @@
+# Deterministic decision-path microbenchmarks (GAPS M4 + M7, cost of safety)
+# 2026-06-29T15:47:42.981Z
+# node v20.18.0 | win32 10.0.26200 | Intel(R) Core(TM) i7-8665U CPU @ 1.90GHz x8
+# 20000 timed samples/class after 5000 warmup; per-call process.hrtime.bigint()
+# NOTE: in-process CPU time only -- NOT end-to-end/MQTT/Ditto latency, NOT test-suite duration.
+
+## Safety gate decision time (M4)
+accepted   MOVE_TO_FLOOR : n=20000  median=5.700us  mean=6.512us  p95=9.500us  p99=19.600us  min=5.100us  max=260.500us  sd=7.556us
+rejected   unknown cmd   : n=20000  median=4.400us  mean=4.943us  p95=5.400us  p99=10.800us  min=3.800us  max=472.300us  sd=8.788us
+rejected   unsafe (estop): n=20000  median=5.600us  mean=6.174us  p95=6.200us  p99=19.400us  min=4.900us  max=512.700us  sd=10.236us
+rejected   unconfirmed   : n=20000  median=4.400us  mean=4.734us  p95=4.700us  p99=8.500us  min=3.900us  max=403.300us  sd=8.698us
+
+## Dispatch decision time (M7)
+Brain A scorer only      : n=20000  median=9.500us  mean=10.425us  p95=12.200us  p99=27.300us  min=8.500us  max=656.900us  sd=7.573us
+Brain A from twin        : n=20000  median=15.600us  mean=18.290us  p95=30.200us  p99=43.700us  min=14.000us  max=471.300us  sd=11.466us
+full orchestrator loop   : n=20000  median=22.400us  mean=25.843us  p95=40.400us  p99=58.000us  min=19.900us  max=1476.100us  sd=20.772us
+
+## Cost of safety (in-process admission overhead)
+direct publish baseline  : mean=0.421us  min=0.345us
+gated admission (median) : 5.700us
+added by safety gate     : 5.279us (median)
+
+# wrote evidence/perf/decision-latency.json (incl. 20000 raw gate-accepted samples)

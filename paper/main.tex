@@ -367,7 +367,7 @@ The final command-path transcript records nine live command decisions. An \artif
 
 \subsection{Quantitative Evidence}
 
-Table~\ref{tab:metrics} separates measured software results, configured design parameters, and metrics deferred to future work. The distinction matters because test-suite durations and configured intervals are useful evidence but are not substitutes for instrumented end-to-end latency measurements.
+Table~\ref{tab:metrics} separates measured software results, configured design parameters, and metrics deferred to future work. The distinction matters because configured intervals and the deterministic decision-time microbenchmarks reported below are useful evidence but are not substitutes for instrumented end-to-end latency, which remains future work.
 
 \begin{table*}[t]
 \caption{Quantitative evidence inventory: measured, configured, and future-work metrics}
@@ -386,8 +386,9 @@ Command safety-gate validation & 33/33 assertions; rejected commands carry zero 
 Dispatch validation & 61/61 assertions across policy, safety, orchestrator, Brain~B, and evaluation suites. & Measured (functional). \\
 Simulator regression & 33/33 pytest items. & Measured (functional). \\
 MQTT TLS round-trip & Publish exit 0 and subscriber receive exit 0 on port 8883; no round-trip time in ms captured. & Measured (functional); RTT is future work. \\
-Safety-gate decision time & Per-call admission latency not yet instrumented. & Future work. \\
-Live dispatch decision time & Active Brain~A decision latency not yet instrumented. & Future work. \\
+Safety-gate decision time & Median 5.7~$\mu$s for an accepted command, 4.4--5.6~$\mu$s for rejected classes; p99 below 20~$\mu$s (20{,}000 samples/class). & Measured (in-process). \\
+Live dispatch decision time & Active Brain~A: median 9.5~$\mu$s (scorer) and 15.6~$\mu$s including context build; full orchestrator loop 22.4~$\mu$s. & Measured (in-process). \\
+Cost of safety & Deterministic admission adds a median 5.3~$\mu$s of in-process computation over a direct dashboard$\rightarrow$MQTT serialization (0.42~$\mu$s). & Measured (in-process). \\
 End-to-end command latency & Coarse transcript indicates sub-second for one dispatch restore; no paired timestamps. & Future work. \\
 Ditto synchronization delay & Bridge logs show repeated twin merges and online status; no paired timestamps. & Future work. \\
 Reconnection time & Reconnect logic present; no timed fault-injection capture. & Future work. \\
@@ -395,6 +396,8 @@ ESP32 resource usage & No heap, CPU, or loop-timing capture (requires the physic
 \bottomrule
 \end{tabularx}
 \end{table*}
+
+The deterministic decision paths were microbenchmarked in-process over 20{,}000 samples per class on a single host, with per-call timing from \artifact{process.hrtime}; the raw distribution is archived in \artifact{evidence/perf/decision-latency.json}. The safety gate evaluates an accepted command in a median of 5.7~$\mu$s and a rejected command in 4.4--5.6~$\mu$s, with the 99th percentile below 20~$\mu$s. The active Brain~A dispatch decision takes a median of 15.6~$\mu$s from the twin snapshot, and the full orchestrator loop---context construction, decision, gate preview, and command assembly---completes in a median of 22.4~$\mu$s. These are CPU times of the decision logic, distinct from the test-suite durations reported by the runner, and they must not be read as end-to-end command latency, which additionally crosses the network, Ditto, and the device and remains future work. The deterministic admission adds only about 5.3~$\mu$s of computation per command relative to a direct dashboard-to-MQTT serialization: the cost of the safety discipline is architectural rather than a measurable performance penalty.
 
 \subsection{Security Results}
 
@@ -426,13 +429,13 @@ Physical unsafe state & Firmware-side interlocks still check emergency, overload
 
 \subsection{Why Architectural Discipline Matters}
 
-The platform's main contribution is not a faster dispatch benchmark. It is a command and state discipline for cyber-physical automation. Ditto gives every consumer the same representation of the elevator. MQTT remains a transport boundary. The dashboard is supervisory, not authoritative over devices. Agents may recommend or request, but a deterministic gate decides. The database records both accepted and rejected actions, which makes post-event audit possible.
+The platform's main contribution is not a faster dispatch benchmark. It is a command and state discipline for cyber-physical automation. Ditto gives every consumer the same representation of the elevator. MQTT remains a transport boundary. The dashboard is supervisory, not authoritative over devices. Agents may recommend or request, but a deterministic gate decides. The database records both accepted and rejected actions, which makes post-event audit possible. The microbenchmarks support adopting this discipline without hesitation: the gate decides in a median of 5.7~$\mu$s and adds only about 5.3~$\mu$s of computation per command over an unsafe direct-publish path, so the cost of routing every command through deterministic admission is architectural, not a performance trade-off.
 
 This discipline is particularly important for LLM-augmented systems. The optional LLM can produce a summary, but it cannot change the command predicate, bypass interlocks, or write direct device commands. Likewise, the ML dispatch challenger can be evaluated against Brain A without becoming active. The result is bounded agentic automation rather than autonomous elevator control.
 
 \subsection{Strengths}
 
-The implementation integrates a real embedded prototype, a simulator with the same MQTT contract, broker authentication and ACLs, TLS on the ESP32-side hop, a Ditto Thing model, bridge normalization, duplicate write suppression, database persistence, deterministic command admission, n8n workflows, a dispatch engine, and a SCADA dashboard. The evidence package is unusually explicit about what is validated and what is only documented. This makes the work suitable for a systems-oriented journal article if the remaining latency and resource measurements are collected.
+The implementation integrates a real embedded prototype, a simulator with the same MQTT contract, broker authentication and ACLs, TLS on the ESP32-side hop, a Ditto Thing model, bridge normalization, duplicate write suppression, database persistence, deterministic command admission, n8n workflows, a dispatch engine, and a SCADA dashboard. The evidence package is unusually explicit about what is validated and what is only documented, and the deterministic decision paths are now quantified. Instrumented end-to-end latency and embedded-resource profiling remain the main measurement extensions.
 
 \subsection{Scope Boundaries}
 
