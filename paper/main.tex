@@ -33,14 +33,14 @@
 
 \title{Safety-Gated Agentic Digital Twin Architecture for Smart Elevator Monitoring and Control}
 
-\author{Zaouidi~Abderrahmane,
-        Bengherbia~Mohamed~Hachem,
+\author{Abderrahmane~Zaouidi,
+        Mohamed~Hachem~Bengherbia,
         and~Mounir~Bouhedda%
 % TODO(human): confirm the official lab name. ``LSEA'' matches the French
 % ``Laboratoire des Syst\`emes \'Electroniques Avanc\'es''; the English
 % expansion below is provided for convenience.
 \thanks{The authors are with the Laboratory of Advanced Electronic Systems (LSEA), University of M\'ed\'ea, M\'ed\'ea, Algeria.}%
-\thanks{Corresponding authors: Zaouidi Abderrahmane, Bengherbia Mohamed Hachem, and Bouhedda Mounir. E-mails: abdelrahmenzaouidi@gmail.com, Mohamed.bengherbia26@gmail.com, bouhedda.mounir@univ-medea.dz.}}
+\thanks{Corresponding authors: Abderrahmane Zaouidi, Mohamed Hachem Bengherbia, and Mounir Bouhedda. E-mails: abdelrahmenzaouidi@gmail.com, Mohamed.bengherbia26@gmail.com, bouhedda.mounir@univ-medea.dz.}}
 
 \markboth{Draft journal article prepared from the master's thesis, June 2026}%
 {Zaouidi \MakeLowercase{\textit{et al.}}: Safety-Gated Agentic Digital Twin Architecture}
@@ -48,7 +48,7 @@
 \maketitle
 
 \begin{abstract}
-Connected elevator supervision requires more than telemetry dashboards: the operational state, command authority, security posture, and maintenance logic must be separated and auditable. This paper presents a laboratory-scale smart elevator digital-twin platform built around a four-floor, single-cabin ESP32-S3 prototype and a self-hosted Industrial-IoT stack. The architecture uses Eclipse Mosquitto for authenticated MQTT transport, a Node.js bridge for MQTT-to-Eclipse-Ditto synchronization, Eclipse Ditto as the operational source of truth, PostgreSQL/TimescaleDB for historical and audit records, n8n workflows for bounded agentic automation, an adaptive dispatch policy engine, and a Next.js SCADA dashboard. The central contribution is a safety-gated command path in which every operator or agent action is first represented as Ditto command intent, evaluated by a deterministic rule-based gate, persisted for audit, forwarded by the bridge, and still constrained by firmware-side interlocks. The ``agentic AI'' layer is therefore bounded: workflows analyze, route, explain, and audit, while safety-critical admission and dispatch authority remain deterministic; the optional local language model is explanatory only, and the machine-learning dispatch challenger runs in shadow mode. Validation evidence from the repository and thesis package shows 127 passing automated software assertions, MQTT authentication and ACL enforcement, live Ditto/database exports, nine live command-decision rows with zero Ditto writes for rejected commands, and documented prototype integration. Instrumented end-to-end latency and ESP32 resource profiling are identified as future work.
+Connected supervision makes elevators easier to monitor, but it turns brokers, dashboards, workflow engines, and twin APIs into part of the safety boundary, where the decisive risk is command authority: who or what may move a safety-critical machine. We present a laboratory-scale smart-elevator digital twin that resolves this through a safety-gated command path. Every operator or agent action becomes command \emph{intent} on an authoritative Eclipse Ditto twin, is admitted by a deterministic rule-based gate, persisted for audit, and only then forwarded to the device, which still applies firmware interlocks; a rejected command produces zero twin writes. The platform is self-hosted on a four-floor ESP32-S3 prototype with authenticated MQTT/TLS (Mosquitto), a Node.js bridge, PostgreSQL/TimescaleDB, n8n workflows, an adaptive dispatch engine, and a Next.js SCADA dashboard, with every autonomy layer bounded: workflows and an optional language model explain and recommend but never hold safety authority. Across 127 passing software assertions and a live command-path run, the gate admits a command in a median of 5.7~$\mu$s, so the safety discipline costs essentially nothing.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -588,7 +588,7 @@ The artifact bundle will be made available at \artifact{<repository URL or DOI>}
 
 \section*{Author Contributions (CRediT)}
 
-Zaouidi Abderrahmane: conceptualization of the software architecture, methodology, software, system integration, validation, investigation, visualization, data curation, and original draft preparation. Bengherbia Mohamed Hachem: implementation support, technical review, validation support, and manuscript review. Bouhedda Mounir: original research idea, supervision, project administration, methodology guidance, and manuscript review and editing.
+Abderrahmane Zaouidi: conceptualization of the software architecture, methodology, software, system integration, validation, investigation, visualization, data curation, and original draft preparation. Mohamed Hachem Bengherbia: implementation support, technical review, validation support, and manuscript review. Mounir Bouhedda: original research idea, supervision, project administration, methodology guidance, and manuscript review and editing.
 
 \section*{Acknowledgment}
 
