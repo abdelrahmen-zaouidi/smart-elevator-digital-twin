@@ -1,0 +1,8 @@
+# MQTT round-trip time -- local broker and TLS listener (GAPS M2)
+# 2026-06-29T16:20:22.077Z
+# node v20.18.0 | win32 10.0.26200 | Intel(R) Core(TM) i7-8665U CPU @ 1.90GHz
+# QoS 1, one in-flight message, 500 samples/transport after 50 warmup; loopback
+# steady-state RTT only (excludes connect + TLS handshake). NOT end-to-end command latency.
+
+local TCP  (mqtt://127.0.0.1:18831) : n=500  median=1.105ms  mean=1.188ms  p95=1.813ms  p99=2.612ms  min=0.762ms  max=6.447ms  sd=0.389ms
+TLS 8883   (mqtts://127.0.0.1:18883) : n=500  median=1.190ms  mean=1.295ms  p95=1.970ms  p99=4.117ms  min=0.820ms  max=6.309ms  sd=0.497ms

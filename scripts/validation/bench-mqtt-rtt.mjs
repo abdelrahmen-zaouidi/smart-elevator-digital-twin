@@ -9,15 +9,10 @@
  *
  * Requires a reachable broker. A throwaway broker is sufficient because this
  * measures transport latency, not authentication (auth/ACL are evidenced
- * separately in evidence/mqtt/). Bring one up with the project image:
+ * separately in evidence/mqtt/). Bring one up by staging the config + certs in
+ * one directory (see scripts/measurement/README.md for the exact commands and
+ * why a directory mount + chmod 644 on the key is required), then:
  *
- *   docker run -d --name mqtt-rtt-test \
- *     -p 18831:1883 -p 18883:8883 \
- *     -v "$PWD/scripts/validation/rtt-test.conf:/mosquitto/config/mosquitto.conf:ro" \
- *     -v "$PWD/infra/mqtt/certs:/certs:ro" \
- *     eclipse-mosquitto:2
- *
- * Then:
  *   node scripts/validation/bench-mqtt-rtt.mjs
  *   docker rm -f mqtt-rtt-test
  */

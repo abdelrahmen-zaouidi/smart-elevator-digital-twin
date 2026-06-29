@@ -87,11 +87,37 @@ Elevator monitoring commonly emphasizes condition indicators such as door cycles
 
 MQTT is a lightweight publish/subscribe protocol suitable for constrained devices and asynchronous IoT systems \cite{hunkeler2008mqtt,oasisMqtt2019,naik2017messaging}. Mosquitto provides a practical open-source broker implementation \cite{light2017mosquitto}. The protocol alone does not provide a complete industrial security posture, so authenticated identities, topic ACLs, TLS, credential lifecycle management, monitoring, and segmentation are required in safety-relevant deployments \cite{nistSp80082,iec62443SecurityLevels2013,nistCsf2024,hassija2019iotSecurity}.
 
-Multi-agent systems distribute responsibility among cooperating entities \cite{wooldridge2009multiAgent,dorri2018multiAgent}. Recent language-model agent literature expands this vocabulary, but a safety-oriented elevator platform cannot allow opaque model outputs to authorize physical commands \cite{xi2023llmAgents,wang2024llmAgents}. Here, ``agentic AI'' means workflow-based automation with explicit roles and deterministic authority boundaries. The optional local language model produces human-readable explanation only; it is not in the command-admission predicate.
+Multi-agent systems distribute responsibility among cooperating entities \cite{wooldridge2009multiAgent,dorri2018multiAgent}. Recent language-model agent literature expands this vocabulary, but a safety-oriented elevator platform cannot allow opaque model outputs to authorize physical commands \cite{xi2023llmAgents,wang2024llmAgents}. We therefore adopt \emph{bounded autonomy} as the primary framing and define ``agentic'' narrowly, once, for use thereafter: workflow-based automation with explicit roles and deterministic authority boundaries. Under this definition the optional local language model produces human-readable explanation only and is not part of the command-admission predicate.
+
+\subsection{Runtime Assurance and Safety Monitors}
+
+The closest prior art to this paper's contribution is not digital-twin modeling but runtime assurance and safety monitoring for cyber-physical and autonomous systems. The Simplex architecture established the pattern of a small, high-assurance decision module that constrains a complex, less-trusted controller so the system stays within a safety envelope \cite{sha2001simplex}. Runtime verification monitors an executing system against formally specified properties and reacts when they are violated \cite{leucker2009runtimeVerification}. For learning-enabled control, shielding synthesizes a reactive safety layer that filters or corrects actions before they reach the plant, so an unverified policy can never drive the system into an unsafe state \cite{alshiekh2018shielding}. These mechanisms share a lineage with supervisory control of discrete-event systems, where a supervisor restricts a plant to an admissible behavior \cite{ramadge1989supervisoryControl}.
+
+The safety-gated command path in this work is an engineering instance of the same principle applied to a connected elevator: the deterministic gate is the high-assurance module; the dashboard, workflows, and optional language model are the complex, untrusted components; and the gate admits a command only if it satisfies the safety predicate of Eq.~\eqref{eq:gate}. What is distinctive is the composition with a twin-as-state-authority design and an auditable reject-with-zero-write contract---rejected commands are recorded for audit yet mutate no state---together with bounded workflow agents whose recommendations never carry safety authority. To our knowledge this specific combination of runtime-assurance-style admission, an authoritative digital twin, and evidence-honest validation has not been reported for elevator supervision.
 
 \subsection{Research Gap}
 
-Prior work is strong in individual layers: digital-twin modeling, MQTT telemetry, predictive maintenance, IoT security, or automation workflows. The gap addressed here is their disciplined integration into a single reproducible cyber-physical architecture where (i) the twin is authoritative, (ii) command authority is explicit and auditable, (iii) safety-critical decisions remain deterministic, (iv) MQTT identities and ACLs enforce separation, and (v) validation artifacts distinguish software evidence from physical-hardware claims.
+Prior work is strong in individual layers: digital-twin modeling, MQTT telemetry, predictive maintenance, IoT security, or automation workflows. The gap addressed here is their disciplined integration into a single reproducible cyber-physical architecture where (i) the twin is authoritative, (ii) command authority is explicit and auditable, (iii) safety-critical decisions remain deterministic, (iv) MQTT identities and ACLs enforce separation, and (v) validation artifacts distinguish software evidence from physical-hardware claims. Table~\ref{tab:gap-comparison} contrasts the main prior-art categories with this work across these five dimensions: each line is strong in its own column, but none combines all five, which is the integration this paper targets.
+
+\begin{table*}[t]
+\caption{Prior-art categories versus this work across the five gap dimensions. Y: addressed; P: partial; --: not addressed. Dimensions: (i)~twin as state authority; (ii)~explicit, auditable command authority; (iii)~deterministic safety-critical decisions; (iv)~MQTT identity/ACL separation; (v)~evidence-honest validation.}
+\label{tab:gap-comparison}
+\centering
+\footnotesize
+\setlength{\tabcolsep}{5pt}
+\begin{tabularx}{\textwidth}{@{}p{0.26\textwidth}ccccc Y@{}}
+\toprule
+Approach (representative work) & (i) & (ii) & (iii) & (iv) & (v) & Primary focus \\
+\midrule
+Digital-twin modeling \cite{kritzinger2018digitalTwin,tao2019digitalTwin,minerva2020digitalTwinIot} & P & -- & -- & -- & -- & Asset representation and synchronization \\
+Elevator IoT / predictive maintenance \cite{vanDinter2022predictiveMaintenance,zonta2020predictiveMaintenance} & P & -- & -- & -- & -- & Condition monitoring and failure prediction \\
+Runtime assurance / shielding / supervisory control \cite{sha2001simplex,alshiekh2018shielding,ramadge1989supervisoryControl} & -- & P & Y & -- & P & Keeping an untrusted controller within a safety envelope \\
+IoT security baselines \cite{iec62443SecurityLevels2013,hassija2019iotSecurity} & -- & -- & -- & Y & -- & Authentication, ACLs, and segmentation \\
+LLM / multi-agent automation \cite{xi2023llmAgents,wang2024llmAgents} & -- & P & -- & -- & -- & Flexible task automation \\
+\textbf{This work} & \textbf{Y} & \textbf{Y} & \textbf{Y} & \textbf{Y} & \textbf{Y} & Safety-gated command authority on an authoritative twin \\
+\bottomrule
+\end{tabularx}
+\end{table*}
 
 \section{System Architecture}
 
@@ -385,7 +411,7 @@ Bridge write interval & 1000 ms; command-intent poll interval 500 ms. & Configur
 Command safety-gate validation & 33/33 assertions; rejected commands carry zero Ditto writes. Suite duration is test-runner time, not latency. & Measured (functional). \\
 Dispatch validation & 61/61 assertions across policy, safety, orchestrator, Brain~B, and evaluation suites. & Measured (functional). \\
 Simulator regression & 33/33 pytest items. & Measured (functional). \\
-MQTT TLS round-trip & Publish exit 0 and subscriber receive exit 0 on port 8883; no round-trip time in ms captured. & Measured (functional); RTT is future work. \\
+MQTT round-trip time & Loopback steady-state (QoS 1, 500 samples): local broker median 1.11~ms, TLS listener median 1.19~ms; plus functional TLS publish/subscribe (exit 0) on port 8883. & Measured. \\
 Safety-gate decision time & Median 5.7~$\mu$s for an accepted command, 4.4--5.6~$\mu$s for rejected classes; p99 below 20~$\mu$s (20{,}000 samples/class). & Measured (in-process). \\
 Live dispatch decision time & Active Brain~A: median 9.5~$\mu$s (scorer) and 15.6~$\mu$s including context build; full orchestrator loop 22.4~$\mu$s. & Measured (in-process). \\
 Cost of safety & Deterministic admission adds a median 5.3~$\mu$s of in-process computation over a direct dashboard$\rightarrow$MQTT serialization (0.42~$\mu$s). & Measured (in-process). \\
@@ -397,7 +423,7 @@ ESP32 resource usage & No heap, CPU, or loop-timing capture (requires the physic
 \end{tabularx}
 \end{table*}
 
-The deterministic decision paths were microbenchmarked in-process over 20{,}000 samples per class on a single host, with per-call timing from \artifact{process.hrtime}; the raw distribution is archived in \artifact{evidence/perf/decision-latency.json}. The safety gate evaluates an accepted command in a median of 5.7~$\mu$s and a rejected command in 4.4--5.6~$\mu$s, with the 99th percentile below 20~$\mu$s. The active Brain~A dispatch decision takes a median of 15.6~$\mu$s from the twin snapshot, and the full orchestrator loop---context construction, decision, gate preview, and command assembly---completes in a median of 22.4~$\mu$s. These are CPU times of the decision logic, distinct from the test-suite durations reported by the runner, and they must not be read as end-to-end command latency, which additionally crosses the network, Ditto, and the device and remains future work. The deterministic admission adds only about 5.3~$\mu$s of computation per command relative to a direct dashboard-to-MQTT serialization: the cost of the safety discipline is architectural rather than a measurable performance penalty.
+The deterministic decision paths were microbenchmarked in-process over 20{,}000 samples per class on a single host, with per-call timing from \artifact{process.hrtime}; the raw distribution is archived in \artifact{evidence/perf/decision-latency.json}. The safety gate evaluates an accepted command in a median of 5.7~$\mu$s and a rejected command in 4.4--5.6~$\mu$s, with the 99th percentile below 20~$\mu$s. The active Brain~A dispatch decision takes a median of 15.6~$\mu$s from the twin snapshot, and the full orchestrator loop---context construction, decision, gate preview, and command assembly---completes in a median of 22.4~$\mu$s. These are CPU times of the decision logic, distinct from the test-suite durations reported by the runner, and they must not be read as end-to-end command latency, which additionally crosses the network, Ditto, and the device and remains future work. The deterministic admission adds only about 5.3~$\mu$s of computation per command relative to a direct dashboard-to-MQTT serialization: the cost of the safety discipline is architectural rather than a measurable performance penalty. Transport latency was measured separately over a loopback broker (\artifact{evidence/perf/mqtt-rtt.txt}): the steady-state MQTT round-trip is a median of 1.11~ms on the plain listener and 1.19~ms over the TLS listener (QoS~1, 500 samples each), confirming that the encrypted hop adds negligible per-message overhead once the handshake is established.
 
 \subsection{Security Results}
 
@@ -472,7 +498,7 @@ Audit tables are ordinary database rows. & Add retention policy, backups, and ta
 
 This paper condensed a master's thesis platform into a journal-style architecture contribution for trustworthy elevator digital twins. The implemented system connects an ESP32-S3 elevator prototype and simulator to Mosquitto, a Node.js bridge, Eclipse Ditto, PostgreSQL/TimescaleDB, n8n workflows, an adaptive dispatch engine, and a Next.js SCADA dashboard. Its central safety property is architectural: commands are never direct UI-to-device actions. They are audited, safety-gated, written as Ditto intent only when accepted, forwarded by the bridge, and constrained again by device-side interlocks.
 
-The validation evidence supports the software and integration claims: 127 automated assertions passed, MQTT authentication and ACLs were exercised, TLS publish/subscribe was demonstrated, Ditto and database exports were captured, and the final command-path run recorded nine live decisions with zero Ditto writes for rejected commands. Future work will extend this software-validated architecture with instrumented end-to-end latency, reconnection, Ditto-synchronization, dispatch-runtime, and ESP32 resource measurements, positioning the platform as a safety-first, auditable, bounded-autonomy architecture for smart elevator digital twins.
+The validation evidence supports the software and integration claims: 127 automated assertions passed, MQTT authentication and ACLs were exercised, TLS publish/subscribe was demonstrated, Ditto and database exports were captured, and the final command-path run recorded nine live decisions with zero Ditto writes for rejected commands. The deterministic decision paths were also quantified: the safety gate admits a command in a median of 5.7~$\mu$s and adds only about 5.3~$\mu$s over a direct publish. Future work will extend this software-validated architecture with instrumented end-to-end latency, reconnection, Ditto-synchronization, and ESP32 resource measurements, positioning the platform as a safety-first, auditable, bounded-autonomy architecture for smart elevator digital twins.
 
 \section*{Data and Artifact Availability}
 

@@ -33,16 +33,21 @@ are **CPU times of the decision logic**, not end-to-end or test-suite times.
 
 ## M2 — MQTT round-trip time (one throwaway broker)
 
-A throwaway broker is enough (this measures transport, not auth):
+A throwaway broker is enough (this measures transport, not auth). Stage the
+config and certs in one directory (single-file mounts are unreliable on Docker
+Desktop/Windows, and the key must be readable by the broker's `mosquitto` user):
 ```bash
-docker run -d --name mqtt-rtt-test \
-  -p 18831:1883 -p 18883:8883 \
-  -v "$PWD/scripts/validation/rtt-test.conf:/mosquitto/config/mosquitto.conf:ro" \
-  -v "$PWD/infra/mqtt/certs:/certs:ro" \
-  eclipse-mosquitto:2
+D="$PWD/.rtt-broker"; mkdir -p "$D"
+cp scripts/validation/rtt-test.conf "$D/mosquitto.conf"
+cp infra/mqtt/certs/ca.crt infra/mqtt/certs/server.crt infra/mqtt/certs/server.key "$D/"
+chmod 644 "$D"/*
+docker run -d --name mqtt-rtt-test -p 18831:1883 -p 18883:8883 \
+  -v "$D:/mosquitto/config" eclipse-mosquitto:2.0.18
 node scripts/validation/bench-mqtt-rtt.mjs        # writes evidence/perf/mqtt-rtt.txt
-docker rm -f mqtt-rtt-test
+docker rm -f mqtt-rtt-test; rm -rf "$D"
 ```
+Captured here (loopback, i7-8665U): local TCP median 1.11 ms, TLS 8883 median
+1.19 ms (500 samples each); see `evidence/perf/mqtt-rtt.txt`.
 
 ## M1 — end-to-end command latency (full stack + simulator/firmware)
 
