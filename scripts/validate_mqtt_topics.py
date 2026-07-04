@@ -33,6 +33,9 @@ SCAN_GLOBS = [
 EXCLUDE_DIRS = {
     "node_modules", ".next", "dist", "build", ".venv", "venv",
     "__pycache__", ".git", "runtime", ".vscode",
+    # Gitignored backup artifacts (scripts/backup.ps1) — n8n exports inside
+    # may contain historical/inactive workflows that predate the topic scheme.
+    "backups",
     # The simulator-side ditto envelope's "topic" field uses a slash form
     # (building/floor1:elevator/things/...) — that is a Ditto protocol topic,
     # not an MQTT topic. Skipping nothing here; we whitelist the pattern below.
