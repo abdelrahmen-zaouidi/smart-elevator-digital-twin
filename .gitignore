@@ -59,3 +59,10 @@ temp/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Local backups produced by scripts/backup.ps1 (contain DB dumps + MQTT secrets)
+backups/
+
+# Presentation / thesis media working directories (not part of the platform)
+_pptx_media/
+photo/

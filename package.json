@@ -1,0 +1,24 @@
+{
+  "name": "smart-elevator-twin",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Agentic AI-driven digital twin platform for smart and secure elevator management — ESP32-S3, MQTT/TLS, Eclipse Ditto, Next.js SCADA dashboard (ElevatorOS), n8n agent workflows, TimescaleDB.",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "apps/dashboard",
+    "packages/shared"
+  ],
+  "scripts": {
+    "test": "node --test scripts/validation/test-command-safety-gate.mjs scripts/validation/test-dispatch-policy-engine.mjs scripts/validation/test-command-lifecycle-lcd.mjs",
+    "test:python": "python -m unittest tests.test_simulator -v",
+    "validate:topics": "python scripts/validate_mqtt_topics.py",
+    "validate:n8n": "node scripts/validate_n8n_upgrade_package.js",
+    "typecheck": "npm run typecheck --workspace apps/dashboard",
+    "lint": "npm run lint --workspace apps/dashboard",
+    "build": "npm run build --workspace apps/dashboard",
+    "validate": "npm run test && npm run validate:n8n && npm run test:python && npm run validate:topics && npm run typecheck && npm run lint"
+  }
+}
