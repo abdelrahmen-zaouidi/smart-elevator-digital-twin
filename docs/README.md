@@ -29,10 +29,11 @@ ESP32 telemetry layer ─► MQTT ingestion ─► bridge ─► Eclipse Ditto �
 | Doc | Read it when you want to… |
 |---|---|
 | [README.md](../README.md) | Get the project overview, tech stack, quickstart. |
+| [DEMO.md](../DEMO.md) | Bring up a live demo in five minutes (seeded simulator + twin provisioning). |
 | [SETUP.md](../SETUP.md) | Stand up the full stack locally, step by step. |
 | [SECURITY.md](../SECURITY.md) | Understand the security baseline, MQTT auth/TLS/ACL, and cutover. |
-| [PROJECT_CONTEXT.md](../PROJECT_CONTEXT.md) | Understand the physical ESP32-S3 prototype, pin map, and firmware. |
-| [AI_HANDOFF_CONTEXT.md](../AI_HANDOFF_CONTEXT.md) | Get a compact context primer (for a new engineer or AI session). |
+| [electrical/elevator_pin_map_review.md](electrical/elevator_pin_map_review.md) | Understand the physical ESP32-S3 prototype: pin map + electrical schematic package. |
+| [CLAUDE.md](../CLAUDE.md) | Get a compact context primer (for a new engineer or AI session). |
 
 ## Architecture & design
 

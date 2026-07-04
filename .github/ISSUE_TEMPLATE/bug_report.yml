@@ -1,0 +1,53 @@
+name: Bug report
+description: Something in the platform misbehaves
+labels: ["bug"]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Dashboard (ElevatorOS)
+        - Bridge (MQTT↔Ditto)
+        - Safety gate / command lifecycle
+        - Dispatch engine
+        - Simulator
+        - Firmware (ESP32-S3)
+        - n8n workflows
+        - Database / history API
+        - MQTT broker / TLS / ACL
+        - Demo mode / setup / docs
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got instead.
+      placeholder: Issued MOVE_TO_FLOOR 3 from the command panel; gate accepted it but no COMMAND_RESULT arrived…
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. docker compose --profile demo up -d
+        2. …
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs / evidence
+      description: |
+        Relevant output — e.g. `docker logs elevator_bridge --tail 50`,
+        `GET /api/system/health` JSON, browser console, serial monitor.
+      render: text
+  - type: input
+    id: env
+    attributes:
+      label: Environment
+      placeholder: "Windows 11, Docker Desktop 4.x, Node 20.x, commit abc1234, physical rig or simulator?"
+    validations:
+      required: true

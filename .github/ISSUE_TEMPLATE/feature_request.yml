@@ -1,0 +1,32 @@
+name: Feature request
+description: Propose an improvement or new capability
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What can't you do today, or what is harder than it should be?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: High-level sketch. Check ROADMAP.md first — it may already be planned.
+    validations:
+      required: true
+  - type: checkboxes
+    id: invariants
+    attributes:
+      label: Invariants
+      description: Proposals must preserve the architecture invariants (see CONTRIBUTING.md).
+      options:
+        - label: This keeps Eclipse Ditto as the single source of truth
+          required: true
+        - label: This does not bypass or weaken the deterministic command safety gate
+          required: true
+        - label: Any AI involved remains advisory-only (no actuation authority)
+          required: true
+        - label: This works local-first (no required cloud dependency)
+          required: true
