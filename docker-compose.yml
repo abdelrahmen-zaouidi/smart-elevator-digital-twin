@@ -99,6 +99,11 @@ services:
     environment:
       - MQTT_HOST=mosquitto
       - MQTT_PORT=1883
+      # Broker auth for the device identity the simulator emulates (anonymous
+      # is disabled on the broker). Empty defaults preserve prior behaviour;
+      # set MQTT_ESP32_USERNAME/MQTT_ESP32_PASSWORD in .env to authenticate.
+      - MQTT_USERNAME=${MQTT_ESP32_USERNAME:-}
+      - MQTT_PASSWORD=${MQTT_ESP32_PASSWORD:-}
       - THING_ID=${PRIMARY_THING_ID:-building:floor1:elevator}
       - PRIMARY_MQTT_ID=${PRIMARY_MQTT_ID:-building-floor1-elevator}
       # If MQTT_TOPIC is unset the simulator derives it from THING_ID via
@@ -121,6 +126,72 @@ services:
     depends_on:
       mosquitto:
         condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - default
+
+  # ---------------------------------------------------------------------------
+  # Demo mode (`docker compose --profile demo up -d`): one-shot Ditto twin
+  # provisioning + a seeded, deterministic simulator with audience-friendly
+  # auto-clearing anomalies. See DEMO.md. Run EITHER --profile simulator OR
+  # --profile demo, never both (both publish as the same device identity).
+  # Prerequisite: the Eclipse Ditto stack (separate compose) must be running.
+  # ---------------------------------------------------------------------------
+  demo-init:
+    image: node:20-alpine
+    container_name: elevator_demo_init
+    profiles: ["demo"]
+    environment:
+      - DITTO_URL=${DITTO_BASE_URL:-http://docker-nginx-1}
+      - DITTO_USER=${DITTO_USERNAME:-ditto}
+      - DITTO_PASSWORD=${DITTO_PASSWORD:-ditto}
+      - THING_ID=${PRIMARY_THING_ID:-building:floor1:elevator}
+    volumes:
+      - ./scripts/demo:/demo:ro
+    command: ["node", "/demo/provision-demo-twin.mjs"]
+    restart: "no"
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - ditto_network
+
+  demo-simulator:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.simulator
+    container_name: elevator_demo_simulator
+    profiles: ["demo"]
+    environment:
+      - MQTT_HOST=mosquitto
+      - MQTT_PORT=1883
+      - MQTT_USERNAME=${MQTT_ESP32_USERNAME:-esp32-elevator}
+      - MQTT_PASSWORD=${MQTT_ESP32_PASSWORD:-}
+      - THING_ID=${PRIMARY_THING_ID:-building:floor1:elevator}
+      - PRIMARY_MQTT_ID=${PRIMARY_MQTT_ID:-building-floor1-elevator}
+      - PUBLISH_INTERVAL_S=3
+      # Deterministic, audience-friendly behaviour: seeded RNG, demo anomaly
+      # cadence, emergencies auto-clear after 90 s instead of latching.
+      - SIM_ANOMALY_PROFILE=demo
+      - SIM_EMERGENCY_AUTO_CLEAR=true
+      - SIM_DEMO_AUTO_CLEAR_S=90
+      - SIM_RANDOM_SEED=42
+      - SIM_PHYSICS_STEP_S=0.1
+      - SIM_LOG_LEVEL=INFO
+    restart: on-failure:5
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+      demo-init:
+        condition: service_completed_successfully
     deploy:
       resources:
         limits:

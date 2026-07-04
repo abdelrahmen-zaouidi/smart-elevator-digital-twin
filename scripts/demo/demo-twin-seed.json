@@ -1,0 +1,119 @@
+{
+  "_comment": "Canonical seed for the elevator Thing used by demo provisioning (scripts/demo/provision-demo-twin.mjs). Mirrors the Thing body in scripts/init-ditto.sh - keep the two in sync when the feature surface changes. Property names match esp32_simulator.py exactly.",
+  "attributes": {
+    "location": "floor1",
+    "manufacturer": "ElevatorCo",
+    "model": "SmartLift-2000",
+    "serialNumber": "SL-2000-001"
+  },
+  "features": {
+    "cabin": {
+      "properties": {
+        "current_floor": 0, "target_floor": 0, "direction": "idle",
+        "load_kg": 0.0, "temperature_c": 20.0,
+        "speed_ms": 0.0, "emergency_stop": false
+      }
+    },
+    "door": {
+      "properties": { "state": "CLOSED", "door_forced_entry": false }
+    },
+    "motor": {
+      "properties": {
+        "vibration_level": 0.0, "hours_operated": 0.0,
+        "health_status": "GOOD", "temperature_c": 35.0
+      }
+    },
+    "security": {
+      "properties": {
+        "audio_distress_active": false,
+        "unauthorized_access_attempts": 0,
+        "rfid_last_card": "", "rfid_access_granted": true,
+        "alert_level": "NORMAL"
+      }
+    },
+    "accessControl": {
+      "properties": {
+        "authorizedTags": {},
+        "recentAccessLog": [],
+        "tag_count": 0,
+        "log_seq": 0,
+        "updated_at": null
+      }
+    },
+    "microcontroller": {
+      "properties": {
+        "board": "ESP32-S3",
+        "connected": false,
+        "status": "OFFLINE",
+        "source": "mqtt_status",
+        "transport": "MQTT",
+        "mqtt_id": "building-floor1-elevator",
+        "mqtt_topic": "elevator/building-floor1-elevator/status",
+        "telemetry_topic": "elevator/building-floor1-elevator/telemetry",
+        "last_seen_at": null,
+        "last_telemetry_at": null,
+        "last_status_at": null,
+        "last_disconnected_at": null
+      }
+    },
+    "incident_log": {
+      "properties": { "entries": [], "open_incidents": 0 }
+    },
+    "control": {
+      "properties": {
+        "pending_command": null,
+        "last_forwarded_command": null,
+        "last_command_result": null,
+        "last_ignored_command_result": null,
+        "dispatch_policy": {
+          "active_policy": "SCAN_COLLECTIVE",
+          "previous_policy": null,
+          "selected_at": null,
+          "min_dwell_until": null,
+          "confidence": 0,
+          "reason": "default policy at provisioning",
+          "overridden_by": null,
+          "active_brain": "scorer_v1",
+          "manual_override": null,
+          "params": {
+            "park_floor": null, "direction_bias": 0, "accel_profile": "NORMAL",
+            "speed_cap_ms": 1.6, "dwell_ms": 5000, "grace_ms": 1200,
+            "deep_idle": false, "force_fan": false, "restrict_floors": false
+          },
+          "shadow": {}
+        }
+      }
+    },
+    "energy": {
+      "properties": {
+        "kwh_today": 0.0, "kwh_month": 0.0,
+        "kwh_baseline": 0.0, "co2_kg": 0.0, "regen_kwh": 0.0
+      }
+    },
+    "performance": {
+      "properties": {
+        "avg_wait_s": 0.0, "avg_trip_s": 0.0,
+        "availability_pct": 100.0, "door_cycle_efficiency": 100.0
+      }
+    },
+    "predicted_failures": {
+      "properties": {
+        "bearing_days": null, "door_motor_days": null,
+        "brake_days": null, "overall_risk": 0
+      }
+    },
+    "ai_analysis": {
+      "properties": {
+        "last_analysis_at": null, "risk_score": 0,
+        "risk_label": "LOW", "summary": "",
+        "recommended_actions": []
+      }
+    },
+    "maintenance_schedule": {
+      "properties": {
+        "next_service_date": null, "last_service_date": null,
+        "open_work_orders": 0, "priority": "NORMAL"
+      }
+    }
+  }
+}
