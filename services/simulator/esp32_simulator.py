@@ -1368,15 +1368,12 @@ def print_dashboard(phy: ElevatorPhysics, tick: int, anomalies: list[str]) -> No
 # ──────────────────────────────────────────────────────────────────────────────
 # MQTT
 # ──────────────────────────────────────────────────────────────────────────────
-def handle_command_payload(physics: ElevatorPhysics, raw: str) -> bool:
-    """Parse one inbound MQTT command. Returns True if a dispatch policy was
-    applied. Tolerant of junk payloads — a bad message is logged and ignored,
-    never fatal. Recognises the DISPATCH_POLICY / SET_DISPATCH_POLICY command
-    the bridge forwards from the safety gate."""
-    try:
-        data = json.loads(raw)
-    except (ValueError, TypeError):
-        return False
+def handle_command_payload(physics: ElevatorPhysics, data: dict) -> bool:
+    """Apply one inbound MQTT command to the simulated device. Returns True if a
+    dispatch policy was applied. Recognises the DISPATCH_POLICY /
+    SET_DISPATCH_POLICY command the bridge forwards from the safety gate; other
+    commands are acknowledged (see build_command_ack) but do not alter the
+    simulated physics."""
     if not isinstance(data, dict):
         return False
     cmd = str(data.get("command", "")).upper()
@@ -1388,6 +1385,26 @@ def handle_command_payload(physics: ElevatorPhysics, raw: str) -> bool:
         params = {}
     physics.apply_dispatch_policy(policy_id, params)
     return True
+
+
+def build_command_ack(physics: ElevatorPhysics, data: dict, applied: bool) -> dict:
+    """Build the COMMAND_RESULT event a real ESP32 publishes to confirm a command
+    it received. The bridge reconciles this terminal result into Ditto's
+    pending_command, completing the dashboard command lifecycle. Without it the
+    command stays PENDING until the bridge's ack-timeout fires (~45s), during
+    which the dashboard blocks every new operator command."""
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return {
+        "event_type":     "COMMAND_RESULT",
+        "command_id":     str(data.get("command_id") or "").strip(),
+        "correlation_id": data.get("correlation_id"),
+        "command":        data.get("command"),
+        "status":         "SUCCEEDED",
+        "current_floor":  physics.current_floor,
+        "reason":         "Applied by simulator" if applied else "Acknowledged by simulator",
+        "source":         "esp32_simulator",
+        "timestamp":      now,
+    }
 
 
 def make_mqtt_client(cfg: SimConfig, physics: Optional[ElevatorPhysics] = None) -> mqtt.Client:
@@ -1418,12 +1435,36 @@ def make_mqtt_client(cfg: SimConfig, physics: Optional[ElevatorPhysics] = None) 
                         reason_code)
 
     def on_message(client, userdata, msg):
+        if physics is None:
+            return
         try:
             raw = msg.payload.decode("utf-8", errors="replace")
         except Exception:  # pragma: no cover - decode is extremely defensive
             return
-        if physics is not None and handle_command_payload(physics, raw):
+        try:
+            data = json.loads(raw)
+        except (ValueError, TypeError):
+            return
+        if not isinstance(data, dict):
+            return
+
+        applied = handle_command_payload(physics, data)
+        if applied:
             log.info("Command applied from %s", msg.topic)
+
+        # Confirm every correlated command on the events topic so the bridge can
+        # reconcile a terminal result into Ditto and the dashboard's command
+        # lifecycle completes instead of waiting out the ~45s ack-timeout.
+        command_id = str(data.get("command_id") or "").strip()
+        if not command_id:
+            return
+        ack = build_command_ack(physics, data, applied)
+        info = client.publish(cfg.mqtt_events_topic, json.dumps(ack), qos=cfg.mqtt_qos)
+        if info.rc == mqtt.MQTT_ERR_SUCCESS:
+            log.info("Acknowledged command %s (%s) -> %s",
+                     command_id, ack["command"], cfg.mqtt_events_topic)
+        else:
+            log.warning("Command ack enqueue failed (rc=%s) for %s", info.rc, command_id)
 
     client.on_connect = on_connect
     client.on_disconnect = on_disconnect

@@ -12,6 +12,16 @@ This file tracks placeholders and unresolved submission tasks in `main.tex`.
 > ready-to-run scripts/instructions are in `scripts/measurement/`. Author e-mails
 > and the lab name are resolved in `main.tex`; the remaining author-only items
 > are listed under "Section Tasks" below and as `% TODO(human)` markers.
+>
+> **Status (2026-07-03, revision v2 — reviewer response).** Applied the seven
+> reviewer points: title/abstract recadrés, "agentic" removed throughout,
+> contributions reduced 5→3, validation framed at three explicit levels, the
+> threat-model and future-hardening tables merged (tables 10→8) with the
+> dispatch-policies table folded into prose, results discussed with
+> proves/matters/links framing, style neutralized, and floor detection reframed
+> as functional open-loop step counting. The previous `% TODO(human)`
+> recommending the threat/hardening table merge has been actioned and removed.
+> One new future-work measurement is now tracked below as **M10**.
 
 ## Required Measurements
 
@@ -61,6 +71,17 @@ This file tracks placeholders and unresolved submission tasks in `main.tex`.
   - Record a video or serial/MQTT log with timestamps for adjacent-floor motion start and arrival.
   - Repeat at least 10 runs in both directions.
   - Report mean, standard deviation, min, and max; keep the current `~6 s` value labeled as author-recorded until this is complete.
+
+- [ ] M10 - Larger live command-path campaign (system-level robustness).
+  - Bring up the full Docker stack (dashboard, Ditto, TimescaleDB, n8n, bridge,
+    Mosquitto, authenticated simulator) and drive at least 50 commands covering
+    every gate rule family (accepted and rejected classes).
+  - Export the `control_command_log` / `audit_log` rows and aggregate
+    accept/reject counts per command class, plus the share of rejected commands
+    with `ditto_write_status = SKIPPED` (must be 100%).
+  - Replaces the current nine-command demonstration with aggregate statistics;
+    until then the paper labels the live run as an integration-level functional
+    demonstration, not a statistical sample.
 
 ## Citation and Metadata Tasks
 

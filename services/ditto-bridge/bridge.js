@@ -86,6 +86,12 @@ const COMMAND_INTENT_MAX_AGE_MS = Number.parseInt(
   process.env.BRIDGE_COMMAND_INTENT_MAX_AGE_MS || "300000",
   10,
 );
+const COMMAND_ACK_TIMEOUT_MS = Number.parseInt(
+  process.env.BRIDGE_COMMAND_ACK_TIMEOUT_MS || "45000",
+  10,
+);
+const LEGACY_LEAF_COMMAND_FORWARDING_ENABLED =
+  String(process.env.BRIDGE_LEGACY_LEAF_COMMAND_FORWARDING || "false").toLowerCase() === "true";
 const MICROCONTROLLER_TELEMETRY_HEARTBEAT_MS = Number.parseInt(
   process.env.MICROCONTROLLER_TELEMETRY_HEARTBEAT_MS || "5000",
   10,
@@ -533,6 +539,18 @@ function parseStatusTopic(topic) {
 function parseTelemetryTopic(topic) {
   if (typeof topic !== "string") return null;
   const match = topic.match(/^elevator\/([^/]+)\/telemetry$/);
+  if (!match) return null;
+
+  const mqttId = match[1];
+  return {
+    mqttId,
+    thingId: mqttIdToThingId(mqttId),
+  };
+}
+
+function parseEventsTopic(topic) {
+  if (typeof topic !== "string") return null;
+  const match = topic.match(/^elevator\/([^/]+)\/events$/);
   if (!match) return null;
 
   const mqttId = match[1];
@@ -1188,6 +1206,8 @@ const COMMAND_FORWARDING_ENABLED =
 const lastForwardedValue = new Map();   // key: "<featureId>/<leaf>"  value: JSON-serialized last sent
 const forwardedCommandIds = [];
 const forwardedCommandIdSet = new Set();
+const forwardingCommandIdSet = new Set();
+const commandAckTimers = new Map();
 
 function rememberForwardedCommandId(commandId) {
   if (!commandId) return;
@@ -1200,21 +1220,108 @@ function rememberForwardedCommandId(commandId) {
   }
 }
 
-function publishMqttCommand(thingId, command, onPublished) {
+function publishMqttCommand(thingId, command, onPublished, onError) {
   if (!mqttClient || !mqttClient.connected) {
     console.warn("[Bridge] MQTT not connected, dropping command", command);
+    if (typeof onError === "function") onError(new Error("MQTT not connected"));
     return false;
   }
   const topic = buildCommandsTopic(thingId);
   const payload = JSON.stringify(command);
   mqttClient.publish(topic, payload, { qos: MQTT_COMMAND_QOS }, (err) => {
-    if (err) console.warn("[Bridge] MQTT publish failed", topic, err.message);
-    else {
+    if (err) {
+      console.warn("[Bridge] MQTT publish failed", topic, err.message);
+      if (typeof onError === "function") onError(err);
+    } else {
       console.info(`[Bridge] -> device ${topic}: ${payload}`);
       if (typeof onPublished === "function") onPublished();
     }
   });
   return true;
+}
+
+function clearCommandAckTimer(commandId) {
+  const timer = commandAckTimers.get(commandId);
+  if (timer) clearTimeout(timer);
+  commandAckTimers.delete(commandId);
+}
+
+async function readPendingCommandIntent(thingId) {
+  try {
+    const response = await dittoClient.get(
+      `/api/2/things/${encodeURIComponent(thingId)}/features/control/properties/pending_command`,
+      { timeout: DITTO_TIMEOUT_MS },
+    );
+    return isObject(response.data) ? response.data : null;
+  } catch (error) {
+    if (!isDittoNotFound(error)) {
+      console.warn("[Bridge] Failed to read pending command:", error.message);
+    }
+    return null;
+  }
+}
+
+async function markCommandTimedOut(thingId, commandId) {
+  clearCommandAckTimer(commandId);
+  const pending = await readPendingCommandIntent(thingId);
+  if (!pending || String(pending.command_id || "") !== String(commandId)) return;
+
+  const status = String(pending.status || "").toUpperCase();
+  if (["COMPLETED", "REJECTED", "FAILED", "TIMED_OUT"].includes(status)) return;
+
+  const timedOutAt = new Date().toISOString();
+  const result = {
+    command_id: pending.command_id,
+    correlation_id: pending.correlation_id,
+    command: pending.command,
+    status: "TIMED_OUT",
+    reason: "No terminal acknowledgement received from device",
+    target_floor: pending.target_floor,
+    timed_out_at: timedOutAt,
+    updated_at: timedOutAt,
+    source: "ditto-bridge",
+  };
+
+  try {
+    await Promise.all([
+      dittoClient.put(
+        `/api/2/things/${encodeURIComponent(thingId)}/features/control/properties/pending_command`,
+        { ...pending, ...result },
+      ),
+      dittoClient.put(
+        `/api/2/things/${encodeURIComponent(thingId)}/features/control/properties/last_command_result`,
+        result,
+      ),
+    ]);
+    console.warn("[Bridge] Command acknowledgement timed out", {
+      thing_id: thingId,
+      command_id: commandId,
+    });
+  } catch (error) {
+    console.warn("[Bridge] Failed to persist command timeout:", error.message);
+  }
+}
+
+function scheduleCommandAckTimeout(thingId, intent) {
+  const commandId = String(intent?.command_id || "");
+  if (!commandId || commandAckTimers.has(commandId)) return;
+
+  const startedAt = Date.parse(intent.forwarded_at || intent.queued_at || intent.requested_at || "");
+  const elapsed = Number.isFinite(startedAt) ? Math.max(0, Date.now() - startedAt) : 0;
+  const remaining = Math.max(1, COMMAND_ACK_TIMEOUT_MS - elapsed);
+  const timer = setTimeout(() => {
+    void markCommandTimedOut(thingId, commandId);
+  }, remaining);
+  commandAckTimers.set(commandId, timer);
+}
+
+function isTrustedCommandIntent(intent) {
+  const authorization = intent?.authorization_context;
+  if (!isObject(authorization) || authorization.verified !== true) return false;
+  if (authorization.issuer !== "dashboard-command-gate" && authorization.issuer !== "n8n-control-gate") {
+    return false;
+  }
+  return Boolean(intent.command_id && intent.correlation_id && intent.safety_gate_version);
 }
 
 // Translate a feature-property write into the MQTT command the firmware speaks.
@@ -1254,6 +1361,9 @@ function buildCommandFromIntent(intent) {
     correlation_id: intent.correlation_id,
     thing_id: intent.thing_id || THING_ID,
     source: "ditto_command_intent",
+    authorization_origin: intent.authorization_context?.issuer,
+    authorized_subject: intent.authorization_context?.subject,
+    authorized_role: intent.authorization_context?.role,
     requested_at: intent.requested_at || intent.queued_at,
   };
 
@@ -1369,28 +1479,66 @@ async function markCommandIntentForwarded(thingId, intent, command) {
   const forwardedAt = new Date().toISOString();
   const updatedIntent = {
     ...intent,
-    status: "FORWARDED",
     forwarded_at: forwardedAt,
     forwarded_command: command.command,
   };
 
   try {
-    await dittoClient.put(
-      `/api/2/things/${encodedThingId}/features/control/properties/pending_command`,
-      updatedIntent,
-    );
-    await dittoClient.put(
-      `/api/2/things/${encodedThingId}/features/control/properties/last_forwarded_command`,
-      {
-        command_id: intent.command_id,
-        correlation_id: intent.correlation_id,
-        command: command.command,
-        requested_command: intent.command,
-        forwarded_at: forwardedAt,
-      },
-    );
+    // Write forwarding metadata on dedicated paths instead of replacing the
+    // whole pending object. A fast device acknowledgement can otherwise race
+    // this write and be overwritten back to FORWARDED/PENDING.
+    await Promise.all([
+      dittoClient.put(
+        `/api/2/things/${encodedThingId}/features/control/properties/pending_command/forwarded_at`,
+        forwardedAt,
+      ),
+      dittoClient.put(
+        `/api/2/things/${encodedThingId}/features/control/properties/pending_command/forwarded_command`,
+        command.command,
+      ),
+      dittoClient.put(
+        `/api/2/things/${encodedThingId}/features/control/properties/last_forwarded_command`,
+        {
+          command_id: intent.command_id,
+          correlation_id: intent.correlation_id,
+          command: command.command,
+          requested_command: intent.command,
+          forwarded_at: forwardedAt,
+        },
+      ),
+    ]);
+    scheduleCommandAckTimeout(thingId, updatedIntent);
   } catch (error) {
     console.warn("[Bridge] Failed to mark command intent as forwarded:", error.message);
+  }
+}
+
+async function markUntrustedCommandIntent(thingId, intent) {
+  const rejectedAt = new Date().toISOString();
+  const result = {
+    command_id: intent?.command_id || null,
+    correlation_id: intent?.correlation_id || null,
+    command: intent?.command || null,
+    status: "REJECTED",
+    reason: "Command intent missing trusted server authorization context",
+    rejected_at: rejectedAt,
+    updated_at: rejectedAt,
+    source: "ditto-bridge",
+  };
+
+  try {
+    await Promise.all([
+      dittoClient.put(
+        `/api/2/things/${encodeURIComponent(thingId)}/features/control/properties/pending_command`,
+        { ...intent, ...result },
+      ),
+      dittoClient.put(
+        `/api/2/things/${encodeURIComponent(thingId)}/features/control/properties/last_command_result`,
+        result,
+      ),
+    ]);
+  } catch (error) {
+    console.warn("[Bridge] Failed to persist untrusted command rejection:", error.message);
   }
 }
 
@@ -1399,12 +1547,24 @@ function publishCommandIntent(thingId, intent, source) {
   if (!commandId) return false;
 
   const status = String(intent.status || "").toUpperCase();
-  if (["FORWARDED", "EXECUTED", "ACKED", "FAILED", "EXPIRED"].includes(status)) {
+  if (["COMPLETED", "REJECTED", "FAILED", "TIMED_OUT", "EXECUTED", "ACKED", "EXPIRED"].includes(status)) {
     rememberForwardedCommandId(commandId);
     return false;
   }
 
-  if (forwardedCommandIdSet.has(commandId)) return false;
+  if (["FORWARDED", "ACCEPTED", "EXECUTING"].includes(status)) {
+    rememberForwardedCommandId(commandId);
+    scheduleCommandAckTimeout(intent.thing_id || thingId, intent);
+    return false;
+  }
+
+  if (intent.forwarded_at) {
+    rememberForwardedCommandId(commandId);
+    scheduleCommandAckTimeout(intent.thing_id || thingId, intent);
+    return false;
+  }
+
+  if (forwardedCommandIdSet.has(commandId) || forwardingCommandIdSet.has(commandId)) return false;
   if (!isFreshCommandIntent(intent)) {
     console.warn("[Bridge] Skipping stale command intent", {
       command_id: commandId,
@@ -1414,21 +1574,117 @@ function publishCommandIntent(thingId, intent, source) {
     rememberForwardedCommandId(commandId);
     return false;
   }
+  if (!isTrustedCommandIntent(intent)) {
+    console.warn("[Bridge] Rejecting unverified Ditto command intent", {
+      command_id: commandId,
+      source,
+      issuer: intent?.authorization_context?.issuer || null,
+    });
+    void markUntrustedCommandIntent(intent.thing_id || thingId, intent);
+    return false;
+  }
 
   const command = buildCommandFromIntent(intent);
   if (!command) return false;
 
   const targetThingId = intent.thing_id || thingId;
+  forwardingCommandIdSet.add(commandId);
   const published = publishMqttCommand(targetThingId, command, () => {
+    forwardingCommandIdSet.delete(commandId);
+    rememberForwardedCommandId(commandId);
     void markCommandIntentForwarded(targetThingId, intent, command);
+  }, () => {
+    forwardingCommandIdSet.delete(commandId);
   });
-  if (!published) return false;
+  if (!published) {
+    forwardingCommandIdSet.delete(commandId);
+    return false;
+  }
 
-  rememberForwardedCommandId(commandId);
   console.info("[Bridge] Ditto command intent forwarded", {
     source,
     command_id: commandId,
     command: command.command,
+  });
+  return true;
+}
+
+async function pushDeviceCommandResultToDitto(topic, payload) {
+  const topicInfo = parseEventsTopic(topic);
+  if (!topicInfo || !isObject(payload)) return false;
+
+  const eventType = String(payload.event_type || payload.type || "").toUpperCase();
+  if (eventType !== "COMMAND_RESULT") return false;
+
+  const commandId = String(payload.command_id || "");
+  if (!commandId) {
+    console.warn("[Bridge] Ignoring command result without command_id", { topic });
+    return true;
+  }
+
+  const pending = await readPendingCommandIntent(topicInfo.thingId);
+  const receivedAt = new Date().toISOString();
+  const rawStatus = String(payload.status || "FAILED").toUpperCase();
+  const status = rawStatus === "SUCCEEDED" || rawStatus === "EXECUTED" ? "COMPLETED" : rawStatus;
+  const result = {
+    command_id: commandId,
+    correlation_id: payload.correlation_id || null,
+    command: payload.command || pending?.command || null,
+    status,
+    reason: payload.reason || null,
+    target_floor: payload.target_floor ?? pending?.target_floor ?? null,
+    current_floor: payload.current_floor ?? null,
+    device_uptime_ms: payload.device_uptime_ms ?? null,
+    received_at: receivedAt,
+    updated_at: receivedAt,
+    source: payload.source || "esp32",
+  };
+
+  if (!pending || String(pending.command_id || "") !== commandId) {
+    await dittoClient.put(
+      `/api/2/things/${encodeURIComponent(topicInfo.thingId)}/features/control/properties/last_ignored_command_result`,
+      {
+        ...result,
+        ignored_reason: "STALE_OR_MISMATCHED_COMMAND_ID",
+        active_command_id: pending?.command_id || null,
+      },
+    );
+    console.warn("[Bridge] Ignored stale/mismatched device acknowledgement", {
+      command_id: commandId,
+      active_command_id: pending?.command_id || null,
+    });
+    return true;
+  }
+
+  const timestampField = status === "COMPLETED"
+    ? "completed_at"
+    : status === "REJECTED"
+      ? "rejected_at"
+      : status === "FAILED"
+        ? "failed_at"
+        : "acknowledged_at";
+  result[timestampField] = receivedAt;
+
+  if (["COMPLETED", "REJECTED", "FAILED", "TIMED_OUT"].includes(status)) {
+    clearCommandAckTimer(commandId);
+  } else {
+    scheduleCommandAckTimeout(topicInfo.thingId, pending);
+  }
+
+  await Promise.all([
+    dittoClient.put(
+      `/api/2/things/${encodeURIComponent(topicInfo.thingId)}/features/control/properties/pending_command`,
+      { ...pending, ...result },
+    ),
+    dittoClient.put(
+      `/api/2/things/${encodeURIComponent(topicInfo.thingId)}/features/control/properties/last_command_result`,
+      result,
+    ),
+  ]);
+
+  console.info("[Bridge] Device command result persisted", {
+    command_id: commandId,
+    status,
   });
   return true;
 }
@@ -1451,6 +1707,11 @@ function handleDittoEvent(thingId, event) {
     publishCommandIntent(thingId, event.value, "sse");
     return;
   }
+
+  // Production path: device commands are forwarded only from the correlated
+  // pending_command control-plane object. Direct feature-leaf forwarding can
+  // race ahead of that intent and creates an uncorrelated duplicate command.
+  if (!LEGACY_LEAF_COMMAND_FORWARDING_ENABLED) return;
 
   const key = `${featureId}/${leaf}`;
   const serialized = JSON.stringify(event.value);
@@ -1568,6 +1829,8 @@ async function startBridge() {
     mqttId: PRIMARY_MQTT_ID,
     writeIntervalMs: DITTO_WRITE_INTERVAL_MS,
     timeoutMs: DITTO_TIMEOUT_MS,
+    commandAckTimeoutMs: COMMAND_ACK_TIMEOUT_MS,
+    legacyLeafCommandForwarding: LEGACY_LEAF_COMMAND_FORWARDING_ENABLED,
   });
 
   mqttClient = mqtt.connect(MQTT_URL, {
@@ -1604,6 +1867,9 @@ async function startBridge() {
   mqttClient.on("message", async (topic, rawMessage) => {
     try {
       const payload = parseMqttPayload(rawMessage);
+      if (await pushDeviceCommandResultToDitto(topic, payload)) {
+        return;
+      }
       if (await pushMicrocontrollerStatusToDitto(topic, payload)) {
         return;
       }

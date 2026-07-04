@@ -187,6 +187,10 @@ $thingBody = @'
     },
     "control": {
       "properties": {
+        "pending_command": null,
+        "last_forwarded_command": null,
+        "last_command_result": null,
+        "last_ignored_command_result": null,
         "dispatch_policy": {
           "active_policy": "SCAN_COLLECTIVE",
           "previous_policy": null,

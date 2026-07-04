@@ -158,6 +158,8 @@ telemetry recency (see [MQTT §5](mqtt-reference.md#5-status--presence)).
 |---|---|---|
 | `control/properties/pending_command` | dashboard `/api/commands` | Accepted command intent (unique `command_id`); bridge reconciles → MQTT. |
 | `control/properties/last_forwarded_command` | bridge | Last command fanned out to the device. |
+| `control/properties/last_command_result` | bridge/device | Correlated terminal result: `COMPLETED`, `REJECTED`, `FAILED`, or `TIMED_OUT`. |
+| `control/properties/last_ignored_command_result` | bridge | Stale/mismatched acknowledgement retained without clearing the active command. |
 | `control/properties/dispatch_policy` | dispatch engine | **Authoritative** dispatch intent (active policy, brain, confidence, params, shadow). |
 | `control/properties/device_applied_policy` | device/simulator | What the cabin is **actually** running (merge-patched alongside intent). |
 

@@ -16,11 +16,16 @@
  */
 
 import { NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
 import {
   validateCommand,
   SAFETY_GATE_CONFIG,
   SAFETY_GATE_VERSION,
 } from "@smart-elevator/shared/commandSafetyGate.js";
+import {
+  commandResultForId,
+  normalizeCommandStatus,
+} from "@smart-elevator/shared/commandLifecycle.js";
 import { query } from "../../../src/server/db.js";
 
 export const dynamic = "force-dynamic";
@@ -37,6 +42,9 @@ const DITTO_PASSWORD = process.env.DITTO_PASSWORD || "ditto";
 const DITTO_AUTH = "Basic " + Buffer.from(`${DITTO_USER}:${DITTO_PASSWORD}`).toString("base64");
 const DITTO_TIMEOUT_MS = Number.parseInt(process.env.DITTO_TIMEOUT_MS || "8000", 10);
 const PRIMARY_THING_ID = process.env.PRIMARY_THING_ID || "building:floor1:elevator";
+const DASHBOARD_AUTH_USER = process.env.DASHBOARD_BASIC_AUTH_USER || "operator";
+const DASHBOARD_AUTH_PASS = process.env.DASHBOARD_BASIC_AUTH_PASS || "";
+const DASHBOARD_OPERATOR_ROLE = String(process.env.DASHBOARD_OPERATOR_ROLE || "OPERATOR").toUpperCase();
 
 const N8N_AUDIT_URL = (
   process.env.N8N_AUDIT_URL ||
@@ -61,6 +69,50 @@ const DEVICE_ACTION_COMMANDS = new Set([
   "REQUEST_STATUS_REFRESH",
   "SET_DISPATCH_POLICY",
 ]);
+
+function safeEqual(left, right) {
+  const leftBuffer = Buffer.from(String(left));
+  const rightBuffer = Buffer.from(String(right));
+  if (leftBuffer.length !== rightBuffer.length) return false;
+  return timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function parseBasicAuthorization(request) {
+  const header = request.headers.get("authorization") || "";
+  if (!header.startsWith("Basic ")) return null;
+  try {
+    const decoded = Buffer.from(header.slice(6), "base64").toString("utf8");
+    const separator = decoded.indexOf(":");
+    if (separator < 0) return null;
+    return {
+      username: decoded.slice(0, separator),
+      password: decoded.slice(separator + 1),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Derive operator identity at the trusted server boundary. Client-provided
+ * source/role/authorized fields are deliberately ignored.
+ */
+function resolveDashboardPrincipal(request) {
+  const credentials = parseBasicAuthorization(request);
+
+  if (DASHBOARD_AUTH_PASS) {
+    const authenticated = credentials
+      && safeEqual(credentials.username, DASHBOARD_AUTH_USER)
+      && safeEqual(credentials.password, DASHBOARD_AUTH_PASS);
+    if (!authenticated) return null;
+  }
+
+  return {
+    subject: credentials?.username || DASHBOARD_AUTH_USER || "local-operator",
+    role: DASHBOARD_OPERATOR_ROLE,
+    authentication: DASHBOARD_AUTH_PASS ? "HTTP_BASIC" : "TRUSTED_LOCAL_BOUNDARY",
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Fetch the latest twin state Ditto knows about.
@@ -373,6 +425,7 @@ function buildCommandIntentWrite(decision, thingId) {
       source: decision.source,
       source_agent: decision.source_agent,
       requested_by: decision.requested_by,
+      role: decision.role,
       requested_at: decision.requested_at || now,
       queued_at: now,
       status: "PENDING",
@@ -386,6 +439,13 @@ function buildCommandIntentWrite(decision, thingId) {
       dispatch_params: raw.dispatch_params || raw.params || undefined,
       reason,
       safety_gate_version: SAFETY_GATE_VERSION,
+      authorization_context: {
+        verified: true,
+        issuer: "dashboard-command-gate",
+        subject: decision.source_agent,
+        role: decision.role,
+        source: decision.source,
+      },
     }),
   };
 }
@@ -434,13 +494,37 @@ export async function POST(request) {
     }, { status: 400 });
   }
 
-  const thingId = body.thing_id || PRIMARY_THING_ID;
+  const principal = resolveDashboardPrincipal(request);
+  if (!principal) {
+    return NextResponse.json({
+      ok: false,
+      error: "Dashboard operator authentication required",
+    }, {
+      status: 401,
+      headers: { "WWW-Authenticate": 'Basic realm="ElevatorOS Commands", charset="UTF-8"' },
+    });
+  }
+
+  const trustedCommand = {
+    ...body,
+    source: "dashboard",
+    source_agent: principal.subject,
+    requested_by: principal.subject,
+    role: principal.role,
+    metadata: {
+      ...(body.metadata && typeof body.metadata === "object" ? body.metadata : {}),
+      authenticated_by: principal.authentication,
+      identity_derived_server_side: true,
+    },
+  };
+
+  const thingId = trustedCommand.thing_id || PRIMARY_THING_ID;
 
   // 1. Pull the latest twin state (or note that Ditto is unreachable).
   const { twin, ditto_reachable, error: dittoErr } = await loadTwinSnapshot(thingId);
 
   // 2. Run the deterministic safety gate.
-  const decision = validateCommand(body, twin, { ditto_reachable });
+  const decision = validateCommand(trustedCommand, twin, { ditto_reachable });
 
   // 3. Persist & audit BEFORE any Ditto write — the decision must always
   //    leave a trace, regardless of write success/failure.
@@ -524,6 +608,85 @@ export async function POST(request) {
     audit_status: `OK/${n8nStatus}`,
     twin_reachable: ditto_reachable,
   }, { status: 200 });
+}
+
+/**
+ * Reconcile the authoritative terminal device result from Ditto into
+ * control_command_log. The browser supplies only command_id; it cannot choose
+ * the status or reason.
+ */
+export async function PATCH(request) {
+  const principal = resolveDashboardPrincipal(request);
+  if (!principal) {
+    return NextResponse.json({ ok: false, error: "Authentication required" }, { status: 401 });
+  }
+
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ ok: false, error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  const commandId = String(body.command_id || "").trim();
+  const thingId = String(body.thing_id || PRIMARY_THING_ID);
+  if (!commandId) {
+    return NextResponse.json({ ok: false, error: "command_id is required" }, { status: 400 });
+  }
+
+  const { twin, ditto_reachable, error } = await loadTwinSnapshot(thingId);
+  if (!ditto_reachable) {
+    return NextResponse.json({
+      ok: false,
+      error: error || "Ditto unavailable",
+    }, { status: 503 });
+  }
+
+  const result = commandResultForId(twin, commandId);
+  if (!result) {
+    return NextResponse.json({
+      ok: false,
+      error: "No matching terminal command result in Ditto",
+      command_id: commandId,
+    }, { status: 409 });
+  }
+
+  const status = normalizeCommandStatus(result.status);
+  const reason = result.reason || result.message || null;
+  const acknowledgedAt = result.completed_at
+    || result.rejected_at
+    || result.failed_at
+    || result.timed_out_at
+    || result.updated_at
+    || new Date().toISOString();
+
+  await query(
+    `UPDATE control_command_log
+        SET status          = $1,
+            acknowledged_at = $2,
+            executed_at     = CASE WHEN $1 = 'COMPLETED' THEN $2 ELSE executed_at END,
+            error_message   = CASE WHEN $1 = 'COMPLETED' THEN NULL ELSE $3 END,
+            metadata        = COALESCE(metadata, '{}'::jsonb) || $4::jsonb
+      WHERE command_id = $5 AND thing_id = $6`,
+    [
+      status,
+      acknowledgedAt,
+      reason,
+      JSON.stringify({
+        terminal_result: result,
+        reconciled_by: principal.subject,
+      }),
+      commandId,
+      thingId,
+    ],
+  );
+
+  return NextResponse.json({
+    ok: true,
+    command_id: commandId,
+    status,
+    result,
+  });
 }
 
 // ---------------------------------------------------------------------------

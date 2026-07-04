@@ -26,11 +26,11 @@ Defined in `infra/mqtt/aclfile`, hashed in `infra/mqtt/passwordfile`.
 |---|---|---|
 | `esp32-elevator` | telemetry, events, status (own device) | commands (own device) |
 | `bridge` | `elevator/+/commands` | telemetry, events, status |
-| `agents` (n8n) | `elevator/+/commands` | telemetry, events, status, commands |
+| `agents` (n8n) | no direct publish; approved intent goes to Ditto | telemetry, events, status, commands |
 | `dashboard` (browser) | — (read‑only) | telemetry, events, status |
 | `healthcheck` | `healthcheck/mqtt` only | — |
 
-**Safety property:** only `bridge` and `agents` may publish to `.../commands`. The
+**Safety property:** only `bridge` may publish to `.../commands`. The
 ESP32 and the browser cannot command the elevator over MQTT (verified below).
 The dashboard `/api/commands` route writes accepted operator intent to Ditto
 only. It also stores a durable `features/control/properties/pending_command`
@@ -38,6 +38,11 @@ object with a unique `command_id`; bridge reconciles that intent and performs
 the MQTT command fanout as the `bridge` broker identity. If the dashboard shows
 an MQTT "Not authorized" failure while moving the cabin, restart `npm run dev`
 so the route reloads the current Ditto-only command path.
+
+Each pending command carries server-derived authorization context. The bridge
+rejects intents that were not issued by the dashboard or n8n safety gate. The
+ESP32 treats only that correlated bridge path as remote-authorized; physical
+cabin and hall requests remain subject to RFID policy.
 
 ## TLS
 

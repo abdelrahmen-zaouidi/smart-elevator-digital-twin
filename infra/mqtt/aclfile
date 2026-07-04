@@ -5,7 +5,8 @@
 # Mosquitto semantics: "topic read" = may subscribe/receive,
 #                      "topic write" = may publish.
 #
-# SAFETY PROPERTY: only 'bridge' and 'agents' may PUBLISH to .../commands.
+# SAFETY PROPERTY: only 'bridge' may PUBLISH to .../commands. Agents write
+# approved pending_command intent to Ditto; the bridge is the sole fanout.
 # The ESP32 may only RECEIVE commands; the dashboard is read-only monitoring.
 # =============================================================================
 
@@ -23,13 +24,12 @@ topic read  elevator/+/events
 topic read  elevator/+/status
 topic write elevator/+/commands
 
-# --- n8n agents: monitor everything, may issue commands ----------------------
+# --- n8n agents: monitor everything; commands must go through Ditto ----------
 user agents
 topic read  elevator/+/telemetry
 topic read  elevator/+/events
 topic read  elevator/+/status
 topic read  elevator/+/commands
-topic write elevator/+/commands
 
 # --- Dashboard browser: READ-ONLY monitoring (commands go via Ditto) ---------
 user dashboard

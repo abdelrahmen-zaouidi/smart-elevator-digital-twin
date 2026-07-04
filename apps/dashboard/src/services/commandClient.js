@@ -36,9 +36,6 @@ export async function submitCommand(request) {
     thing_id: request.thing_id || env.THING_ID,
     command_id: request.command_id || createCommandId(),
     correlation_id: request.correlation_id || createCorrelationId(),
-    source: "dashboard",
-    source_agent: request.source_agent || "dashboard-operator",
-    requested_by: request.requested_by || request.source_agent || "dashboard-operator",
     reason: request.reason ?? [],
     confirmation: request.confirmation === true,
     human_approved: request.human_approved === true,
@@ -93,5 +90,31 @@ export async function submitCommand(request) {
       audit_status: "PENDING",
       safety_snapshot: {},
     };
+  }
+}
+
+/**
+ * Ask the trusted server boundary to reconcile a terminal device result from
+ * Ditto into the durable command log. The browser supplies only the command
+ * identifier; status and reason are read server-side from Eclipse Ditto.
+ */
+export async function reconcileCommandResult(commandId) {
+  if (!commandId) return null;
+
+  try {
+    const { ok, data } = await fetchJson("/api/commands", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ command_id: commandId }),
+      retries: 1,
+      timeoutMs: 8000,
+    });
+    return ok ? data : null;
+  } catch (error) {
+    console.warn("[SCADA] command result reconciliation deferred", {
+      command_id: commandId,
+      error: error.message,
+    });
+    return null;
   }
 }

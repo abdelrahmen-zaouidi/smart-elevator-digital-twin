@@ -4160,6 +4160,62 @@ void handleDeviceDiagnosticCommand(const char* action, const char* source) {
   publishNow = true;
 }
 
+// -----------------------------------------------------------------------------
+// COMMAND ACKNOWLEDGEMENT
+// The MQTT->Ditto bridge writes each operator command into Ditto's
+// pending_command and waits for the device to confirm it on the events topic.
+// Without that COMMAND_RESULT the command stays PENDING until the bridge's
+// ~45s ack-timeout fires, during which the dashboard blocks every new command.
+// We stash the correlated identity here in the receive callback and publish the
+// ack from loop() so we never publish from inside the PubSubClient callback.
+// -----------------------------------------------------------------------------
+bool        pendingCmdAck = false;
+char        pendingCmdAckId[48]      = "";
+char        pendingCmdAckCorr[48]    = "";
+char        pendingCmdAckCommand[32] = "";
+const char* pendingCmdAckStatus      = "SUCCEEDED";
+
+void queueCommandAck(const char* commandId, const char* correlationId,
+                     const char* command, const char* status) {
+  // Only correlated commands (those carrying a command_id from the safety gate)
+  // participate in the lifecycle; bare/legacy commands need no ack.
+  if (!commandId || commandId[0] == '\0') return;
+  strlcpy(pendingCmdAckId, commandId, sizeof(pendingCmdAckId));
+  strlcpy(pendingCmdAckCorr, correlationId ? correlationId : "", sizeof(pendingCmdAckCorr));
+  strlcpy(pendingCmdAckCommand, command ? command : "", sizeof(pendingCmdAckCommand));
+  pendingCmdAckStatus = status ? status : "SUCCEEDED";
+  pendingCmdAck = true;
+}
+
+void flushPendingCommandAck() {
+  if (!pendingCmdAck) return;
+  pendingCmdAck = false;
+  if (!mqttClient.connected() || pendingCmdAckId[0] == '\0') return;
+
+#if ARDUINOJSON_VERSION_MAJOR >= 7
+  JsonDocument evt;
+#else
+  StaticJsonDocument<256> evt;
+#endif
+  evt["event_type"]       = "COMMAND_RESULT";
+  evt["command_id"]       = pendingCmdAckId;
+  if (pendingCmdAckCorr[0])    evt["correlation_id"] = pendingCmdAckCorr;
+  if (pendingCmdAckCommand[0]) evt["command"]        = pendingCmdAckCommand;
+  evt["status"]           = pendingCmdAckStatus;
+  evt["current_floor"]    = currentFloor;
+  evt["device_uptime_ms"] = (unsigned long)millis();
+  evt["source"]           = "esp32";
+
+  static char buf[256];
+  size_t len = serializeJson(evt, buf, sizeof(buf));
+  if (mqttClient.publish(MQTT_EVENTS_TOPIC, (const uint8_t*)buf, len, false)) {
+    Serial.print("[MQTT] command ack -> ");
+    Serial.println(pendingCmdAckId);
+  } else {
+    Serial.println("[MQTT] command ack publish FAILED");
+  }
+}
+
 void onMqttMessage(char* topic, byte* payload, unsigned int length) {
   // Fixed buffer instead of Arduino String to avoid per-message heap
   // allocation/fragmentation over long uptime. Commands are tiny; an
@@ -4201,6 +4257,9 @@ void onMqttMessage(char* topic, byte* payload, unsigned int length) {
   }
 
   const char* command = cmd["command"] | "";
+  const char* commandId = cmd["command_id"] | "";
+  const char* correlationId = cmd["correlation_id"] | "";
+  const char* ackStatus = "SUCCEEDED";
 
   if (!strcmp(command, "MOVE_TO_FLOOR") || !strcmp(command, "CALL")) {
     if (cmd["target_floor"].is<int>()) {
@@ -4273,7 +4332,11 @@ void onMqttMessage(char* topic, byte* payload, unsigned int length) {
   } else {
     Serial.print("[MQTT] unknown command: ");
     Serial.println(command);
+    ackStatus = "REJECTED";
   }
+
+  // Confirm the correlated command back to the bridge (published from loop()).
+  queueCommandAck(commandId, correlationId, command, ackStatus);
 }
 
 
@@ -4389,6 +4452,7 @@ void serviceMqtt() {
   if (mqttClient.connected()) {
     mqttClient.loop();  // keepalive + inbound dispatch (fast)
     publishMqttOnlineStatus(false);
+    flushPendingCommandAck();  // confirm any command received above (tiny payload)
 
     if (!moving) {  // <-- publish only when NOT moving
       bool periodic = (millis() - lastPublishMs >= PUBLISH_INTERVAL_MS);

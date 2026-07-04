@@ -291,6 +291,14 @@ if (rejectionReasons.length === 0 && canonical && actuationEnabled && DEVICE_ACT
     queued_at: now,
     status: 'PENDING',
     reason: reason.join('; '),
+    safety_gate_version: 'n8n-control-gate-1.0.0',
+    authorization_context: {
+      verified: true,
+      issuer: 'n8n-control-gate',
+      subject: sourceAgent,
+      role: 'AGENT',
+      source: providedSource,
+    },
   };
   if (canonical === 'MOVE_TO_FLOOR') pendingCommand.target_floor = Number(action.target_floor);
   writes.push({ path: 'features/control/properties/pending_command', value: pendingCommand });

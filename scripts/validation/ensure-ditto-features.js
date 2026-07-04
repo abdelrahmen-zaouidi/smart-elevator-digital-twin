@@ -68,6 +68,14 @@ const FEATURE_SEEDS = {
       last_disconnected_at: null,
     },
   },
+  control: {
+    properties: {
+      pending_command: null,
+      last_forwarded_command: null,
+      last_command_result: null,
+      last_ignored_command_result: null,
+    },
+  },
   incident_log: {
     properties: {
       entries: [],

@@ -66,4 +66,9 @@ export const env = {
       process.env.VITE_DITTO_SSE_ENABLED,
     true,
   ),
+  COMMAND_TIMEOUT_MS: asInt(
+    process.env.NEXT_PUBLIC_COMMAND_TIMEOUT_MS ||
+      process.env.VITE_COMMAND_TIMEOUT_MS,
+    50000,
+  ),
 };

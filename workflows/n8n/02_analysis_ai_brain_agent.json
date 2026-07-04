@@ -105,7 +105,7 @@
     {
       "parameters": {
         "method": "PUT",
-        "url": "={{ ($env.DITTO_BASE_URL || 'http://docker-nginx-1') + '/api/2/things/' + $json.thing_id + '/features/ai_analysis' }}",
+        "url": "={{ ($env.DITTO_BASE_URL || 'http://docker-nginx-1') + '/api/2/things/' + $json.thing_id + '/features/ai_analysis/properties' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpBasicAuth",
         "sendHeaders": true,
@@ -123,7 +123,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ properties: { analyzed_at: $json.risk_analysis.analyzed_at, severity: $json.risk_analysis.severity, risk_score: $json.risk_analysis.risk_score, flags: $json.risk_analysis.flags, llm_analysis: $json.llm_analysis, recommended_action: ($json.risk_analysis.triggered_action && $json.risk_analysis.triggered_action.command) || '', explanation: $json.risk_analysis.explanation, requires_human_review: $json.risk_analysis.requires_human_review, source: 'n8n', updated_at: $json.risk_analysis.analyzed_at } }) }}",
+        "jsonBody": "={{ JSON.stringify({ analyzed_at: $json.risk_analysis.analyzed_at, severity: $json.risk_analysis.severity, risk_score: $json.risk_analysis.risk_score, flags: $json.risk_analysis.flags, llm_analysis: $json.llm_analysis, recommended_action: ($json.risk_analysis.triggered_action && $json.risk_analysis.triggered_action.command) || '', explanation: $json.risk_analysis.explanation, requires_human_review: $json.risk_analysis.requires_human_review, source: 'n8n', updated_at: $json.risk_analysis.analyzed_at }) }}",
         "options": {
           "timeout": 5000
         }

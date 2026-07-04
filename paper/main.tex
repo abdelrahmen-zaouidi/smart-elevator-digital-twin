@@ -31,7 +31,7 @@
 
 \begin{document}
 
-\title{Safety-Gated Agentic Digital Twin Architecture for Smart Elevator Monitoring and Control}
+\title{Safety-Gated Digital Twin Architecture for Smart-Elevator Supervision: A Software-Validated Laboratory Prototype}
 
 \author{Abderrahmane~Zaouidi,
         Mohamed~Hachem~Bengherbia,
@@ -43,33 +43,31 @@
 \thanks{Corresponding authors: Abderrahmane Zaouidi, Mohamed Hachem Bengherbia, and Mounir Bouhedda. E-mails: abdelrahmenzaouidi@gmail.com, Mohamed.bengherbia26@gmail.com, bouhedda.mounir@univ-medea.dz.}}
 
 \markboth{Draft journal article prepared from the master's thesis, June 2026}%
-{Zaouidi \MakeLowercase{\textit{et al.}}: Safety-Gated Agentic Digital Twin Architecture}
+{Zaouidi \MakeLowercase{\textit{et al.}}: Safety-Gated Digital Twin Architecture for Smart-Elevator Supervision}
 
 \maketitle
 
 \begin{abstract}
-Connected supervision makes elevators easier to monitor, but it turns brokers, dashboards, workflow engines, and twin APIs into part of the safety boundary, where the decisive risk is command authority: who or what may move a safety-critical machine. We present a laboratory-scale smart-elevator digital twin that resolves this through a safety-gated command path. Every operator or agent action becomes command \emph{intent} on an authoritative Eclipse Ditto twin, is admitted by a deterministic rule-based gate, persisted for audit, and only then forwarded to the device, which still applies firmware interlocks; a rejected command produces zero twin writes. The platform is self-hosted on a four-floor ESP32-S3 prototype with authenticated MQTT/TLS (Mosquitto), a Node.js bridge, PostgreSQL/TimescaleDB, n8n workflows, an adaptive dispatch engine, and a Next.js SCADA dashboard, with every autonomy layer bounded: workflows and an optional language model explain and recommend but never hold safety authority. Across 127 passing software assertions and a live command-path run, the gate admits a command in a median of 5.7~$\mu$s, so the safety discipline costs essentially nothing.
+Connected supervision makes elevators easier to monitor, but it turns brokers, dashboards, workflow engines, and twin APIs into part of the safety boundary, where the decisive risk is command authority: who or what may move a safety-critical machine. This article is framed as an architecture and software-validation study of a laboratory-scale smart-elevator digital twin that addresses this risk through a safety-gated command path. Eclipse Ditto is the authoritative operational state, and every operator or workflow action becomes command \emph{intent} that a deterministic rule-based gate must admit before it is persisted for audit and forwarded to the device, which still applies firmware interlocks; a rejected command is logged yet produces zero twin writes. The platform is self-hosted on a four-floor ESP32-S3 prototype with authenticated MQTT/TLS (Mosquitto), a Node.js bridge, PostgreSQL/TimescaleDB, bounded n8n workflows, an adaptive dispatch engine, and a Next.js SCADA dashboard; the workflows and an optional language model explain and recommend but never hold command authority, and a machine-learning dispatch challenger remains a non-authoritative shadow. Validation is reported at the software and integration level: 127 automated assertions pass, broker authentication, ACLs, and TLS publish/subscribe are exercised, and a live command-path run confirms the reject-with-zero-write invariant. The deterministic gate admits a command in a median of 5.7~$\mu$s and adds about 5.3~$\mu$s of in-process computation over a direct publish, so the safety discipline imposes negligible computational cost on command logic. Floor position is tracked functionally by calibrated step counting; closed-loop sensor confirmation, calibrated safety sensing, instrumented end-to-end latency, and embedded-resource profiling remain future work.
 \end{abstract}
 
 \begin{IEEEkeywords}
-Digital twin, smart elevator, Industrial Internet of Things, Eclipse Ditto, MQTT, SCADA, agentic AI, safety gate.
+Digital twin, smart elevator, Industrial Internet of Things, Eclipse Ditto, MQTT, SCADA, bounded automation, runtime assurance, safety gate.
 \end{IEEEkeywords}
 
 \section{Introduction}
 
 Elevators are safety-oriented cyber-physical systems whose availability affects mobility, emergency access, maintenance cost, and building security. Connected supervision can provide earlier visibility into overload, vibration, overheating, door faults, unauthorized access, and degraded components. However, connectivity also increases the attack surface: brokers, workflow engines, dashboards, digital-twin APIs, and configuration endpoints become part of the operational safety boundary.
 
-Many laboratory IoT systems present telemetry directly to a dashboard or allow a web application to publish device commands. That pattern is inappropriate for a safety-oriented elevator platform. In this work, the dashboard never controls the device directly. MQTT transports device telemetry and device-facing commands, but Eclipse Ditto is the operational source of truth. Commands from operators or agents become Ditto intent only after deterministic safety validation, database logging, and audit recording. The bridge then forwards accepted intent to the device over authenticated MQTT, and the firmware or simulator applies local interlocks before actuation.
+Many laboratory IoT systems present telemetry directly to a dashboard or allow a web application to publish device commands. That pattern is inappropriate for a safety-oriented elevator platform. In this work, the dashboard never controls the device directly. MQTT transports device telemetry and device-facing commands, but Eclipse Ditto is the operational source of truth. Commands from operators or workflows become Ditto intent only after deterministic safety validation, database logging, and audit recording. The bridge then forwards accepted intent to the device over authenticated MQTT, and the firmware or simulator applies local interlocks before actuation.
 
-The article is framed as an architecture and systems paper, not as an optimization benchmark. The prototype is a rigorous laboratory platform, not a certified industrial elevator controller. We adopt the evidence boundary of the thesis validation package: software artifacts and live-stack traces are reported as validated, while physical mechanisms without captured serial, video, or log measurements are reported as documented integration or future work.
+The article is framed as an architecture, prototype, and software-and-integration validation study, not as an optimization benchmark or a claim of exhaustive system-level experimental proof. The prototype is a rigorous laboratory platform, not a certified industrial elevator controller. We adopt the evidence boundary of the thesis validation package and report results at three explicit levels: software validation (logic and integration proven by automated tests, exports, and live-stack traces), integration validation (end-to-end behavior of the assembled stack observed on live infrastructure), and documented hardware integration (the built prototype and its observed behavior). Physical mechanisms without captured serial, video, or log measurements are reported as documented integration or future work, and evidence at one level is never taken to imply another.
 
-The main contributions are:
+The paper makes three main contributions:
 \begin{itemize}
-  \item a reproducible self-hosted Industrial-IoT architecture for a smart elevator digital twin using ESP32-S3, Mosquitto, Eclipse Ditto, PostgreSQL/TimescaleDB, n8n, a Node.js bridge, and a Next.js SCADA dashboard;
-  \item a command-authority discipline in which Ditto is the state authority, MQTT is the transport layer, and every command follows a deterministic safety-gated intent path;
-  \item a bounded agentic automation layer composed of surveillance, analysis, control, security/maintenance, notification, optimization, and audit workflows, with no generative-AI authority over safety-critical commands;
-  \item an adaptive dispatch policy engine where deterministic Brain A is active and the machine-learning Brain B remains a shadow challenger pending future evidence and human approval;
-  \item an evidence-driven validation summary that separates software PASS results, documented hardware integration, and prototype timing from the instrumented measurements deferred to future work.
+  \item \emph{a reproducible, self-hosted supervision architecture} for a smart-elevator digital twin, integrating an ESP32-S3 prototype, Mosquitto, Eclipse Ditto, PostgreSQL/TimescaleDB, bounded n8n workflows, an adaptive dispatch engine, and a Next.js SCADA dashboard;
+  \item \emph{a command-authority discipline} in which Ditto is the state authority, MQTT is the transport layer, and every command follows a deterministic safety-gated intent path with an auditable reject-with-zero-write contract; the workflows and an optional language model explain and recommend but never hold safety authority, and the machine-learning dispatch challenger (Brain~B) remains a non-authoritative shadow pending future evidence and human approval;
+  \item \emph{a quantitative, evidence-honest validation} showing that this safety discipline adds negligible in-process computation (median 5.7~$\mu$s gate decision; about 5.3~$\mu$s over a direct publish), while explicitly separating software validation, integration validation, and documented hardware integration.
 \end{itemize}
 
 The rest of the paper is organized as follows. Section II reviews related work and the research gap. Section III presents the system architecture and command path. Section IV describes the implementation. Section V reports validation evidence and the measurements deferred to future work. Sections VI and VII discuss scope, limitations, and future hardening, and Section VIII concludes.
@@ -90,7 +88,7 @@ Elevator monitoring commonly emphasizes condition indicators such as door cycles
 
 MQTT is a lightweight publish/subscribe protocol suitable for constrained devices and asynchronous IoT systems \cite{hunkeler2008mqtt,oasisMqtt2019,naik2017messaging}. Mosquitto provides a practical open-source broker implementation \cite{light2017mosquitto}. The protocol alone does not provide a complete industrial security posture, so authenticated identities, topic ACLs, TLS, credential lifecycle management, monitoring, and segmentation are required in safety-relevant deployments \cite{nistSp80082,iec62443SecurityLevels2013,nistCsf2024,hassija2019iotSecurity}.
 
-Multi-agent systems distribute responsibility among cooperating entities \cite{wooldridge2009multiAgent,dorri2018multiAgent}. Recent language-model agent literature expands this vocabulary, but a safety-oriented elevator platform cannot allow opaque model outputs to authorize physical commands \cite{xi2023llmAgents,wang2024llmAgents}. We therefore adopt \emph{bounded autonomy} as the primary framing and define ``agentic'' narrowly, once, for use thereafter: workflow-based automation with explicit roles and deterministic authority boundaries. Under this definition the optional local language model produces human-readable explanation only and is not part of the command-admission predicate.
+Multi-agent systems distribute responsibility among cooperating entities \cite{wooldridge2009multiAgent,dorri2018multiAgent}. Recent language-model agent literature expands this vocabulary, but a safety-oriented elevator platform cannot allow opaque model outputs to authorize physical commands \cite{xi2023llmAgents,wang2024llmAgents}. We therefore adopt \emph{bounded autonomy} as the primary framing: rather than open-ended agency, the platform uses bounded workflow automation with explicit roles and deterministic authority boundaries. Under this framing the optional local language model produces human-readable explanation only, is advisory without command authority, and is not part of the command-admission predicate.
 
 \subsection{Runtime Assurance and Safety Monitors}
 
@@ -122,6 +120,8 @@ LLM / multi-agent automation \cite{xi2023llmAgents,wang2024llmAgents} & -- & P &
 \end{tabularx}
 \end{table*}
 
+The pattern in Table~\ref{tab:gap-comparison} is that each prior-art category is strong along one or two dimensions and silent on the rest, and in particular no category combines an authoritative twin (i) with explicit, auditable command authority (ii). The contribution of this paper is therefore not a new mechanism in any single column but the disciplined composition of all five, validated with an explicit evidence boundary.
+
 \section{System Architecture}
 
 \subsection{Layered Stack}
@@ -138,7 +138,7 @@ The implemented stack is organized as the layered architecture of Fig.~\ref{fig:
   >={Latex[length=2.4mm]},
 ]
 \node[band] (pres) {\textbf{Presentation} --- Next.js SCADA dashboard (server-side API routes; no direct MQTT)};
-\node[band, below=of pres] (agent) {\textbf{Agents} --- n8n surveillance, analysis, control, security/maintenance, notification, optimization, audit $+$ adaptive dispatch engine (Brain~A active, Brain~B shadow)};
+\node[band, below=of pres] (agent) {\textbf{Automation (workflows)} --- n8n surveillance, analysis, control, security/maintenance, notification, optimization, audit $+$ adaptive dispatch engine (Brain~A active, Brain~B shadow)};
 \node[band, below=of agent, very thick] (state) {\textbf{State \& history} --- Eclipse Ditto: Thing \texttt{building:floor1:elevator} (attributes $+$ features; intent vs.\ device-applied) \quad$\cdot$\quad PostgreSQL/TimescaleDB: history, audit, decisions};
 \node[band, below=of state] (integ) {\textbf{Integration} --- Node.js bridge: MQTT$\leftrightarrow$Ditto, change suppression, command-intent reconciliation};
 \node[band, below=of integ] (trans) {\textbf{Transport} --- Eclipse Mosquitto: per-identity auth, ACLs, TLS (8883); topics \texttt{telemetry}/\texttt{events}/\texttt{status}/\texttt{commands}};
@@ -170,7 +170,7 @@ MQTT broker & Authenticated message transport, topic routing, retained status, A
 Bridge & Telemetry normalization, Ditto feature writes, command-intent reconciliation, MQTT command forwarding. & Human authorization, risk acceptance, or hidden business logic. & Makes the bridge auditable and recoverable after restart; accepted intent can be reconciled from Ditto. \\
 Eclipse Ditto & Current operational state, attributes, subsystem features, command intent, policy boundary. & Long-term history or direct motor execution. & Gives all consumers one source of truth while preserving device-side interlocks. \\
 PostgreSQL/TimescaleDB & Telemetry history, audit, command decisions, notifications, maintenance and dispatch records. & Current operational authority. & Enables traceability and analytics without making stale database rows control the elevator. \\
-n8n workflows & Surveillance, analysis, maintenance, security, notifications, audit routing, bounded command requests. & Safety-critical command admission or LLM-based authorization. & Enables agentic automation while keeping decisions inspectable and testable. \\
+n8n workflows & Surveillance, analysis, maintenance, security, notifications, audit routing, bounded command requests. & Safety-critical command admission or LLM-based authorization. & Enables bounded automation while keeping decisions inspectable and testable. \\
 Next.js SCADA dashboard & Operator visualization, history views, command-request UI, server-side API calls. & Direct MQTT publication or client-side secrets. & Prevents browser bypass of Ditto, safety gate, and audit logging. \\
 \bottomrule
 \end{tabularx}
@@ -189,7 +189,7 @@ Next.js SCADA dashboard & Operator visualization, history views, command-request
   node distance=5.5mm and 5.5mm,
 ]
 % main accept pipeline (left to right)
-\node[box] (op) {Operator or agent};
+\node[box] (op) {Operator or workflow};
 \node[box, right=of op] (api) {Dashboard API\\\texttt{POST}\\\texttt{/api/commands}};
 \node[gate, right=of api] (gate) {Deterministic\\safety gate};
 \node[box, right=of gate] (ditto) {Ditto intent\\\texttt{control.}\\\texttt{pending\_command}};
@@ -220,14 +220,14 @@ Next.js SCADA dashboard & Operator visualization, history views, command-request
 
 Fig.~\ref{fig:command-path} is the architectural centerpiece. The dashboard and n8n workflows may request commands. The deterministic gate decides whether they can become Ditto intent. The bridge forwards only accepted, fresh, non-duplicate command intents. The firmware or simulator remains the last software boundary before actuation. This design prevents three unsafe shortcuts: browser-to-MQTT command publication, LLM-generated command authorization, and direct workflow mutation of actuator state.
 
-\subsection{Agentic Automation Boundary}
+\subsection{Automation Boundary}
 
-The n8n layer is decomposed into specialized workflows. The surveillance agent canonicalizes twin events and records timelines. The analysis agent computes deterministic risk flags and optional human-readable explanation. The control agent applies the safety gate. Security and maintenance agents update security state and work orders. Notification agents write and deliver outbox records. Optimization and audit agents record dispatch decisions and operational traces. This is a multi-workflow agentic system, but the authority boundary is conservative: risk classification, command admission, and dispatch policy selection are deterministic and auditable.
+The n8n layer is decomposed into specialized workflows. The surveillance workflow canonicalizes twin events and records timelines. The analysis workflow computes deterministic risk flags and optional human-readable explanation. The control workflow applies the safety gate. Security and maintenance workflows update security state and work orders. Notification workflows write and deliver outbox records. Optimization and audit workflows record dispatch decisions and operational traces. This is bounded, multi-workflow automation, and the authority boundary is conservative: risk classification, command admission, and dispatch-policy selection are deterministic and auditable.
 
 Table~\ref{tab:agent-workflows} summarizes the workflow roles. The important point is not the number of workflows, but the fact that each workflow has a bounded contract and produces explicit state or audit artifacts. In particular, the analysis workflow may attach an LLM-generated explanation when the local model is enabled, but the command gate does not read that explanation as an authorization signal.
 
 \begin{table*}[t]
-\caption{Bounded agentic workflow decomposition}
+\caption{Bounded workflow automation decomposition}
 \label{tab:agent-workflows}
 \centering
 \footnotesize
@@ -235,13 +235,13 @@ Table~\ref{tab:agent-workflows} summarizes the workflow roles. The important poi
 \toprule
 Workflow role & Trigger & Decision/action & Evidence or state written \\
 \midrule
-Surveillance agent & Ditto change, MQTT-derived twin event, scheduled scan. & Canonicalize event, deduplicate, update timeline, preserve correlation identifiers. & Telemetry/history rows and normalized event envelope. \\
-Analysis agent & New telemetry/risk event. & Apply deterministic risk rules; optionally request explanatory text from local LLM. & \artifact{ai\_analysis} feature, risk flags, audit rows. \\
-Control agent & Operator or workflow command request. & Run deterministic command safety gate and branch accepted/rejected paths. & \artifact{control\_command\_log}, \artifact{audit\_log}, Ditto writes only if accepted. \\
-Security agent & RFID/security/forced-door event or risk escalation. & Update security state, request lockdown only through the gate, surface human-review requirement. & \artifact{security} feature and audit rows. \\
-Maintenance agent & Wear/risk threshold, repeated incident, scheduled review. & Create or update work-order state using rule-based evidence. & \artifact{maintenance\_schedule}, \artifact{maintenance\_work\_orders}. \\
-Notification agent & Alert or outbox due event. & Build dedupe key, select channels, retry or mark failed/sent. & \artifact{notification\_outbox}. \\
-Optimization/audit agent & Dispatch cycle or audit event. & Record dispatch decisions, policy changes, reward/proxy outcomes, workflow activity. & Dispatch/audit tables and dashboard history APIs. \\
+Surveillance workflow & Ditto change, MQTT-derived twin event, scheduled scan. & Canonicalize event, deduplicate, update timeline, preserve correlation identifiers. & Telemetry/history rows and normalized event envelope. \\
+Analysis workflow & New telemetry/risk event. & Apply deterministic risk rules; optionally request explanatory text from local LLM. & \artifact{ai\_analysis} feature, risk flags, audit rows. \\
+Control workflow & Operator or workflow command request. & Run deterministic command safety gate and branch accepted/rejected paths. & \artifact{control\_command\_log}, \artifact{audit\_log}, Ditto writes only if accepted. \\
+Security workflow & RFID/security/forced-door event or risk escalation. & Update security state, request lockdown only through the gate, surface human-review requirement. & \artifact{security} feature and audit rows. \\
+Maintenance workflow & Wear/risk threshold, repeated incident, scheduled review. & Create or update work-order state using rule-based evidence. & \artifact{maintenance\_schedule}, \artifact{maintenance\_work\_orders}. \\
+Notification workflow & Alert or outbox due event. & Build dedupe key, select channels, retry or mark failed/sent. & \artifact{notification\_outbox}. \\
+Optimization/audit workflow & Dispatch cycle or audit event. & Record dispatch decisions, policy changes, reward/proxy outcomes, workflow activity. & Dispatch/audit tables and dashboard history APIs. \\
 \bottomrule
 \end{tabularx}
 \end{table*}
@@ -256,7 +256,7 @@ Table~\ref{tab:prototype-specs} summarizes the physical prototype, shown in Fig.
 \centering
 % TODO(human): confirm permission to publish this prototype photograph.
 \includegraphics[width=0.92\columnwidth]{prototype.jpg}
-\caption{Reduced-scale four-floor, single-cabin ESP32-S3 elevator prototype (annotated). Temperature, vibration, and load are simulated through ADC potentiometers; KY-024 and SPDT switches are mounted provisions only, not validated in the deployed firmware. \textit{Pending author permission to publish.}}
+\caption{Reduced-scale four-floor, single-cabin ESP32-S3 elevator prototype (annotated). Floor position is tracked functionally by calibrated step counting; temperature, vibration, and load are simulated through ADC potentiometers. KY-024 and SPDT switches are design provisions for future closed-loop floor/door confirmation. \textit{Pending author permission to publish.}}
 \label{fig:prototype}
 \end{figure} The deployed firmware implements a finite-state machine with idle, door-opening, door-wait, door-closing, moving-up, moving-down, arrival, error-stop, and emergency states. Remote commands are not direct GPIO operations; they are parsed into state-machine requests and checked against firmware-side interlocks.
 
@@ -274,8 +274,8 @@ Frame dimensions & Approximately 84 cm high, 44 cm wide, 38 cm deep. \\
 Cabin dimensions & 15 cm cube, approximately 3375 cm$^3$. \\
 Movement timing & Approximately 6 s per adjacent floor, author-recorded prototype timing, not instrumented video/log evidence. \\
 Controller & ESP32-S3 microcontroller running the custom elevator firmware. \\
-Cabin motion & NEMA17 stepper through microstep driver; calibrated step-count profile; KY-024 Hall sensors mounted for future confirmation. \\
-Door motion & DC motor through L298N/HW-095 H-bridge; timed travel profile; SPDT limit switches mounted for future confirmation. \\
+Cabin motion & NEMA17 stepper through microstep driver; floor position tracked functionally by a calibrated step-count profile. KY-024 Hall sensors are a design provision for future closed-loop confirmation. \\
+Door motion & DC motor through L298N/HW-095 H-bridge; timed travel profile. SPDT limit switches are a design provision for future closed-loop door confirmation. \\
 Local HMI & 16x4 I2C LCD, push buttons, emergency input, buzzer, fan relay. \\
 Security input & MFRC522 RFID support in firmware; physical UID scan evidence is outside current validation scope. \\
 Safety telemetry & Temperature, vibration, and load currently simulated through ADC potentiometers. \\
@@ -320,7 +320,7 @@ The default Thing ID is \thingid, mapped to MQTT-safe ID \mqttid. Attributes sto
 
 PostgreSQL/TimescaleDB stores raw telemetry, audit events, command decisions, notifications, maintenance work orders, system health records, and dispatch decisions. The final evidence export records seven application tables and 19,901 rows in \artifact{telemetry\_raw} as of 2026-06-13 02:07:12.
 
-The use of both Ditto and PostgreSQL is intentional. Ditto answers ``what is the asset state now?'' and PostgreSQL answers ``what happened, why, when, and who requested it?'' A rejected command is therefore just as important as an accepted command: it proves that the system constrained an unsafe or unauthorized request and preserved the reason for later audit. This separation also supports future retention policies, fleet analytics, and incident reconstruction without overloading the twin with historical arrays.
+The use of both Ditto and PostgreSQL is intentional. Ditto answers ``what is the asset state now?'' and PostgreSQL answers ``what happened, why, when, and who requested it?'' A rejected command is therefore just as important as an accepted command: it records that the system constrained an unsafe or unauthorized request and preserved the reason for later audit. This separation also supports future retention policies, fleet analytics, and incident reconstruction without overloading the twin with historical arrays.
 
 \subsection{Safety Gate}
 
@@ -367,28 +367,7 @@ The dispatch policy engine chooses the operating policy, not direct movement com
 
 Brain A is the active deterministic scorer. Brain B is a softmax linear challenger over the shared feature vector. Brain B is logged in shadow mode and cannot become authoritative unless future evidence satisfies promotion gates and a human approves. This separation preserves explainability, rollback, and safety authority.
 
-Table~\ref{tab:dispatch-policies} summarizes the policy layer. These policies select dispatch behavior, not immediate cabin actuation. A policy command still goes through the same safety gate and is then reported separately as intent and applied state.
-
-\begin{table}[t]
-\caption{Dispatch policies and safety overrides}
-\label{tab:dispatch-policies}
-\centering
-\footnotesize
-\begin{tabularx}{\columnwidth}{@{}p{0.38\columnwidth}Y@{}}
-\toprule
-Policy or override & Role \\
-\midrule
-\artifact{SCAN\_COLLECTIVE} & Default collective service policy. \\
-\artifact{UP\_PEAK} / \artifact{DOWN\_PEAK} & Traffic-biased policies for directional demand. \\
-\artifact{ECO\_ENERGY} & Energy-saving policy when demand and fairness conditions allow it. \\
-\artifact{NEAREST\_GREEDY} & Short-horizon nearest-call service for sparse demand. \\
-\artifact{HEALTH\_LIMP} & Reduced-stress operation under degraded machine indicators. \\
-\artifact{BALANCED\_INTERFLOOR} & General balanced policy for mixed traffic. \\
-\artifact{SECURITY\_RESTRICTED} & Restricted service under elevated security state. \\
-\artifact{FIRE\_RECALL}, \artifact{EMERGENCY\_STOP}, \artifact{FULL\_LOCKDOWN}, \artifact{OVERLOAD\_HOLD} & Hard safety overrides that pre-empt optimization. \\
-\bottomrule
-\end{tabularx}
-\end{table}
+Crucially, these policies select dispatch behavior, not immediate cabin actuation: a policy command still passes the same safety gate and is then reported separately as intent (\artifact{control.dispatch\_policy}) and applied state (\artifact{control.device\_applied\_policy}). The dispatch engine therefore adds an optimization layer without acquiring any authority the gate does not already mediate.
 
 \subsection{SCADA Dashboard}
 
@@ -409,7 +388,7 @@ The dashboard is therefore not a thin MQTT client. Its pages surface the live tw
 
 \subsection{Evidence Policy}
 
-Validation uses an evidence boundary rather than a blanket PASS claim. A result is marked PASS only when a repository artifact, exported log, screenshot, query output, or command transcript exists. Software tests validate software logic and integration. Documented hardware integration records the built prototype, wiring, dimensions, and observed behavior, but it is not equivalent to certified or instrumented physical validation.
+Validation uses an evidence boundary rather than a blanket PASS claim. A result is marked PASS only when a repository artifact, exported log, screenshot, query output, or command transcript exists. Consistent with the framing in Section~I, we report at three levels and never let evidence at one level imply another. \emph{Software validation} covers logic and integration proven by automated tests, exports, and live-stack traces. \emph{Integration validation} covers end-to-end behavior of the assembled stack observed on live infrastructure. \emph{Documented hardware integration} records the built prototype, wiring, dimensions, and observed behavior, but it is not equivalent to certified or instrumented physical validation. The present paper contributes primarily at the first two levels; the third is documentation, and instrumented physical measurement is future work.
 
 \subsection{Validation Summary}
 
@@ -434,15 +413,19 @@ Command safety gate & PASS & \artifact{command\_safety\_gate\_test\_output.txt}:
 Dispatch engine & PASS & 61/61 dispatch assertions across policy, safety, orchestrator, Brain B, and evaluation suites. & Brain B remains shadow-only. \\
 Simulator regression & PASS & \artifact{simulator\_pytest\_output.txt}: 33/33 pytest items in 0.31 s. & Simulator software evidence, not physical hardware proof. \\
 Database/history & PASS & Seven application tables; \artifact{telemetry\_raw} count 19,901 rows on 2026-06-13. & Live database export. \\
-End-to-end command path & PASS & Nine command-log rows; emergency stop, reset, rejected move, rejected invalid dispatch policy, accepted dispatch policy. & Device endpoint was authenticated simulator for final software run. \\
+End-to-end command path & PASS & Nine command-log rows; emergency stop, reset, rejected move, rejected invalid dispatch policy, accepted dispatch policy. & Integration-level functional demonstration, not a statistical sample; device endpoint was authenticated simulator. \\
 Physical prototype & Documented integration & Thesis photographs, dimensions, wiring, and author-recorded adjacent-floor timing of approximately 6 s. & Not certified; not fully instrumented. \\
 \bottomrule
 \end{tabularx}
 \end{table*}
 
+The takeaway from Table~\ref{tab:validation-summary} is not any single row but the shape of the evidence: the software and integration layers of the architecture---transport security, bridge/twin synchronization, deterministic admission, dispatch, persistence, and the end-to-end command path---are each backed by a captured artifact, whereas the physical layer is deliberately marked as documented integration. The architecture is therefore reproducible and its command discipline is exercised on live infrastructure, while no claim is made that the physical mechanisms are instrumentally certified.
+
 \subsection{Command-Path Results}
 
 The final command-path transcript records nine live command decisions. An \artifact{EMERGENCY\_STOP} without confirmation was rejected. A confirmed \artifact{EMERGENCY\_STOP} was accepted and forwarded. A \artifact{MOVE\_TO\_FLOOR} request during unsafe state was rejected. \artifact{RESET\_EMERGENCY} was accepted. Unknown dispatch policies were rejected. Valid \artifact{SET\_DISPATCH\_POLICY} commands were accepted and adopted by the simulator. Every rejected command carried \artifact{ditto\_write\_status = SKIPPED}, demonstrating the zero-write invariant on live infrastructure.
+
+These nine decisions are an integration-level functional demonstration that the accept and reject branches, and the reject-with-zero-write invariant, hold on the assembled live stack; they are not a statistical robustness sample. Per-class behavior across the command catalog is exercised separately by the 33/33 gate assertions (Table~\ref{tab:validation-summary}) and by the 20{,}000-samples-per-class decision-time microbenchmarks reported below, so the small live run and the large software campaigns play complementary roles. A larger live command campaign that reports aggregate accept/reject statistics across all command classes is a well-defined extension and is identified as future work.
 
 \subsection{Quantitative Evidence}
 
@@ -476,7 +459,7 @@ ESP32 resource usage & No heap, CPU, or loop-timing capture (requires the physic
 \end{tabularx}
 \end{table*}
 
-The deterministic decision paths were microbenchmarked in-process over 20{,}000 samples per class on a single host, with per-call timing from \artifact{process.hrtime}; the raw distribution is archived in \artifact{evidence/perf/decision-latency.json}. The safety gate evaluates an accepted command in a median of 5.7~$\mu$s and a rejected command in 4.4--5.6~$\mu$s, with the 99th percentile below 20~$\mu$s. The active Brain~A dispatch decision takes a median of 15.6~$\mu$s from the twin snapshot, and the full orchestrator loop---context construction, decision, gate preview, and command assembly---completes in a median of 22.4~$\mu$s. These are CPU times of the decision logic, distinct from the test-suite durations reported by the runner, and they must not be read as end-to-end command latency, which additionally crosses the network, Ditto, and the device and remains future work. The deterministic admission adds only about 5.3~$\mu$s of computation per command relative to a direct dashboard-to-MQTT serialization: the cost of the safety discipline is architectural rather than a measurable performance penalty. Transport latency was measured separately over a loopback broker (\artifact{evidence/perf/mqtt-rtt.txt}): the steady-state MQTT round-trip is a median of 1.11~ms on the plain listener and 1.19~ms over the TLS listener (QoS~1, 500 samples each), confirming that the encrypted hop adds negligible per-message overhead once the handshake is established.
+The deterministic decision paths were microbenchmarked in-process over 20{,}000 samples per class on a single host, with per-call timing from \artifact{process.hrtime}; the raw distribution is archived in \artifact{evidence/perf/decision-latency.json}. The safety gate evaluates an accepted command in a median of 5.7~$\mu$s and a rejected command in 4.4--5.6~$\mu$s, with the 99th percentile below 20~$\mu$s. The active Brain~A dispatch decision takes a median of 15.6~$\mu$s from the twin snapshot, and the full orchestrator loop---context construction, decision, gate preview, and command assembly---completes in a median of 22.4~$\mu$s. These are CPU times of the decision logic, distinct from the test-suite durations reported by the runner, and they must not be read as end-to-end command latency, which additionally crosses the network, Ditto, and the device and remains future work. The deterministic admission adds about 5.3~$\mu$s of computation per command relative to a direct dashboard-to-MQTT serialization. This result matters for adoption: runtime-assurance and shielding layers are sometimes resisted on the grounds that inserting a filter between controller and plant costs time \cite{sha2001simplex,alshiekh2018shielding}, yet here the admission predicate is three orders of magnitude below the millisecond-scale MQTT round-trip and roughly six orders of magnitude below the multi-second physical floor-to-floor move. The safety filter is therefore not on the system's critical path, so the cost of the discipline is architectural rather than a measurable performance penalty at the level of command logic. Transport latency was measured separately over a loopback broker (\artifact{evidence/perf/mqtt-rtt.txt}): the steady-state MQTT round-trip is a median of 1.11~ms on the plain listener and 1.19~ms over the TLS listener (QoS~1, 500 samples each), which indicates that the encrypted hop adds negligible per-message overhead once the handshake is established.
 
 \begin{figure}[t]
 \centering
@@ -497,7 +480,7 @@ The deterministic decision paths were microbenchmarked in-process over 20{,}000 
 \node[font=\scriptsize, anchor=west] at (axis cs:10,0.80) {p95 9.5\,$\mu$s};
 \end{axis}
 \end{tikzpicture}
-\caption{Empirical CDF of the deterministic safety-gate decision time over 20{,}000 accepted-command evaluations (x clipped at 25~$\mu$s; p99 is 19.6~$\mu$s). The gate decides in single-digit microseconds, so routing every command through it is essentially free.}
+\caption{Empirical CDF of the deterministic safety-gate decision time over 20{,}000 accepted-command evaluations (x clipped at 25~$\mu$s; p99 is 19.6~$\mu$s). The gate decides in single-digit microseconds; routing every command through it therefore adds negligible per-command overhead.}
 \label{fig:latency}
 \end{figure}
 
@@ -505,81 +488,66 @@ The deterministic decision paths were microbenchmarked in-process over 20{,}000 
 
 The broker evidence demonstrates deny-by-default authentication behavior: anonymous and wrong-password clients were rejected, while an authenticated bridge identity received telemetry. The ACL model also separates device and dashboard identities from command publication. This is stronger than a demo-only anonymous MQTT broker, but it remains a laboratory baseline. Production deployment would require credential rotation, certificate lifecycle management, network segmentation, service-to-service TLS, HTTPS for the dashboard and Ditto, secret management, and role-separated Ditto policies.
 
-Table~\ref{tab:threat-model} summarizes the threat model covered by the prototype. The table is not a complete industrial security certification; it is an engineering boundary for a local research deployment.
-
-% TODO(human): Table~\ref{tab:threat-model} (threat model) and Table~\ref{tab:future-hardening}
-% (limitations -> hardening) overlap substantially -- the security rows of each
-% restate the other. Recommend merging the security-specific rows into one table
-% and/or moving the threat model to an appendix to save ~half a page. Left intact
-% pending your decision (this is a delete/merge action).
-\begin{table*}[t]
-\caption{Concise threat model and mitigation boundary}
-\label{tab:threat-model}
-\centering
-\footnotesize
-\begin{tabularx}{\textwidth}{@{}p{0.20\textwidth}p{0.28\textwidth}Y@{}}
-\toprule
-Threat & Implemented mitigation & Remaining limitation \\
-\midrule
-Unauthorized MQTT publish & Broker authentication, anonymous access disabled, per-identity ACLs, TLS for the ESP32-side listener. & Requires password/certificate lifecycle management and segmentation before deployment. \\
-Browser-to-device command bypass & Dashboard has no MQTT command-publish authority; commands use server-side API, safety gate, audit, Ditto intent, bridge forwarding. & Dashboard authentication is prototype-level and must be replaced with production identity management. \\
-Unsafe agent or LLM recommendation & Workflows may request commands, but the deterministic gate decides; optional LLM output is explanation only. & Prompt/output logging and model governance are future work if LLM explanations are enabled. \\
-Stale or inconsistent operational state & Gate checks twin freshness; bridge writes Ditto as source of truth; database is historical. & Needs instrumented clock synchronization and freshness-delay measurements. \\
-Replay or duplicate command & Bridge tracks forwarded command IDs and filters stale intents; gate applies cooldown. & Multi-replica deployments need shared cooldown/command memory. \\
-Credential leakage in workflows & Secrets are excluded from exported workflows and environment templates. & Production n8n requires restricted access, secret manager, and audit-linked credentials. \\
-Physical unsafe state & Firmware-side interlocks still check emergency, overload, door state, floor bounds, and malformed commands. & Certified hardware safety circuits are outside the prototype. \\
-\bottomrule
-\end{tabularx}
-\end{table*}
+The threats addressed by the prototype, their implemented mitigations, and the remaining hardening steps are consolidated with the broader system limitations in Table~\ref{tab:limitations-hardening} (Section~\ref{sec:limits}). That table is an engineering boundary for a local research deployment, not a complete industrial security certification.
 
 \section{Discussion}
 
 \subsection{Why Architectural Discipline Matters}
 
-The platform's main contribution is not a faster dispatch benchmark. It is a command and state discipline for cyber-physical automation. Ditto gives every consumer the same representation of the elevator. MQTT remains a transport boundary. The dashboard is supervisory, not authoritative over devices. Agents may recommend or request, but a deterministic gate decides. The database records both accepted and rejected actions, which makes post-event audit possible. The microbenchmarks support adopting this discipline without hesitation: the gate decides in a median of 5.7~$\mu$s and adds only about 5.3~$\mu$s of computation per command over an unsafe direct-publish path, so the cost of routing every command through deterministic admission is architectural, not a performance trade-off.
+The platform's main contribution is not a faster dispatch benchmark. It is a command and state discipline for cyber-physical automation. Ditto gives every consumer the same representation of the elevator. MQTT remains a transport boundary. The dashboard is supervisory, not authoritative over devices. Workflows may recommend or request, but a deterministic gate decides. The database records both accepted and rejected actions, which makes post-event audit possible. The microbenchmarks indicate that this discipline can be adopted without a measurable performance penalty at the level of command logic: the gate decides in a median of 5.7~$\mu$s and adds about 5.3~$\mu$s of computation per command over an unsafe direct-publish path, so the cost of routing every command through deterministic admission is architectural rather than a performance trade-off.
 
-This discipline is particularly important for LLM-augmented systems. The optional LLM can produce a summary, but it cannot change the command predicate, bypass interlocks, or write direct device commands. Likewise, the ML dispatch challenger can be evaluated against Brain A without becoming active. The result is bounded agentic automation rather than autonomous elevator control.
+The reject-with-zero-write invariant deserves emphasis as a safety property rather than an implementation detail. It proves that an unsafe or unauthorized request is recorded for audit yet cannot partially mutate the twin: the state authority is never advanced by a command the gate did not admit. This matters because a state authority that could be nudged by rejected intent would let an untrusted client influence downstream consumers---dispatch, workflows, and the dashboard all read Ditto---even without a full command. The property is the concrete, elevator-specific realization of the runtime-assurance principle that an untrusted component must not move the system out of its admissible set \cite{sha2001simplex,alshiekh2018shielding,ramadge1989supervisoryControl}, and it is what makes gap dimension~(ii), auditable command authority, more than a logging convention.
+
+This discipline is particularly important for LLM-augmented systems. The optional LLM can produce a summary, but it cannot change the command predicate, bypass interlocks, or write direct device commands. Likewise, the ML dispatch challenger can be evaluated against Brain A without becoming active. The result is bounded automation rather than autonomous elevator control.
 
 \subsection{Strengths}
 
-The implementation integrates a real embedded prototype, a simulator with the same MQTT contract, broker authentication and ACLs, TLS on the ESP32-side hop, a Ditto Thing model, bridge normalization, duplicate write suppression, database persistence, deterministic command admission, n8n workflows, a dispatch engine, and a SCADA dashboard. The evidence package is unusually explicit about what is validated and what is only documented, and the deterministic decision paths are now quantified. Instrumented end-to-end latency and embedded-resource profiling remain the main measurement extensions.
+The implementation integrates a real embedded prototype, a simulator with the same MQTT contract, broker authentication and ACLs, TLS on the ESP32-side hop, a Ditto Thing model, bridge normalization, duplicate write suppression, database persistence, deterministic command admission, n8n workflows, a dispatch engine, and a SCADA dashboard. The evidence package is explicit about what is validated and what is only documented, and the deterministic decision paths are now quantified. Instrumented end-to-end latency and embedded-resource profiling remain the main measurement extensions.
 
 \subsection{Scope Boundaries}
 
-The present platform is not a certified elevator controller. KY-024 floor sensors and SPDT door limit switches are mounted hardware provisions, but independent floor/door confirmation is future firmware integration. Temperature, vibration, and load are simulated through ADC potentiometers. Physical RFID validation requires UID captures and accepted/denied scan evidence. The final software end-to-end run used an authenticated simulator as the device endpoint. These boundaries do not invalidate the architecture, but they must remain visible in the paper.
+The present platform is not a certified elevator controller. Floor position is tracked functionally, in open loop, by a calibrated step-count profile; the KY-024 floor sensors and SPDT door limit switches are design provisions for future closed-loop confirmation, which would add independent, redundant position and door-state evidence rather than a currently missing basic function. Temperature, vibration, and load are simulated through ADC potentiometers. Physical RFID validation requires UID captures and accepted/denied scan evidence. The final software end-to-end run used an authenticated simulator as the device endpoint. These boundaries do not invalidate the architecture, but they must remain visible in the paper.
 
 \section{Limitations and Future Work}
+\label{sec:limits}
 
-The main limitations and corresponding hardening steps are summarized in Table~\ref{tab:future-hardening}. The most important limitation is certification scope: the system is a laboratory prototype and must not be presented as a deployable building elevator controller. The software architecture can inform safer connected-elevator supervision, but industrial adoption would require certified controllers, independent safety circuits, formal hazard analysis, and compliance review.
+Table~\ref{tab:limitations-hardening} consolidates, in a single view, the security threats addressed by the prototype (Section~\ref{sec:eval}) and the broader system limitations, each paired with its current mitigation or status and the corresponding hardening step. The most important limitation is certification scope: the system is a laboratory prototype and must not be presented as a deployable building elevator controller. The software architecture can inform safer connected-elevator supervision, but industrial adoption would require certified controllers, independent safety circuits, formal hazard analysis, and compliance review.
 
 \begin{table*}[t]
-\caption{Limitations mapped to future hardening steps}
-\label{tab:future-hardening}
+\caption{Consolidated limitations and threats mapped to current mitigation and future hardening}
+\label{tab:limitations-hardening}
 \centering
 \footnotesize
-\begin{tabularx}{\textwidth}{@{}p{0.22\textwidth}p{0.28\textwidth}Y@{}}
+\begin{tabularx}{\textwidth}{@{}p{0.22\textwidth}p{0.30\textwidth}Y@{}}
 \toprule
-Current limitation & Required hardening step & Reason \\
+Limitation or threat & Implemented mitigation or current status & Required hardening step \\
 \midrule
-Laboratory prototype, not certified equipment. & Certified safety hardware, formal hazard analysis, independent verification, and jurisdiction-specific elevator-code compliance. & Software gates do not replace safety-rated controllers or physical protection circuits. \\
-KY-024 floor confirmation mounted but not validated in deployed firmware. & Integrate final pins, debouncing, homing, alignment checks, and floor-by-floor timestamped logs. & Converts open-loop step-count tracking into independently confirmed position evidence. \\
-SPDT door confirmation mounted as future extension. & Integrate end-position detection, timeout handling, and obstruction sensing. & Timed door profiles alone are insufficient for production door-state assurance. \\
-Simulated temperature, vibration, and load proxies. & Replace ADC potentiometers with calibrated sensors and calibration tables. & Supports defensible maintenance and overload claims. \\
-RFID support implemented but physical evidence incomplete. & Capture reader wiring, UID scans, accepted/denied cases, counters, MQTT events, and Ditto security updates. & Separates firmware capability from validated access-control behavior. \\
-Latency metrics missing. & Run synchronized end-to-end command, MQTT RTT, Ditto sync, dispatch, and reconnection measurements. & Converts architecture validation into quantitative systems evaluation. \\
-ESP32 resource metrics missing. & Capture heap, loop timing, TLS memory, and long-duration serial logs. & Demonstrates embedded feasibility under real MQTT/TLS load. \\
-Prototype dashboard authentication. & Add server-side identity, RBAC, HTTPS, audit-linked user IDs, and secure cookies. & Required for multi-user accountability and secure SCADA operation. \\
-Brain B shadow model only. & Keep shadow-only until real outcome data, promotion-gate success, rollback plan, and human approval exist. & Prevents unvalidated ML from becoming command authority. \\
-Audit tables are ordinary database rows. & Add retention policy, backups, and tamper-evident or append-only audit export. & Strengthens forensic value for safety/security events. \\
+Laboratory prototype, not certified equipment; firmware interlocks are not safety-rated circuits. & Firmware-side interlocks check emergency stop, overload, door state, and floor bounds; the deterministic gate blocks unsafe backend commands. & Certified safety hardware, independent protection circuits, formal hazard analysis, and jurisdiction-specific elevator-code compliance. \\
+Floor position is open-loop (calibrated step counting); no independent closed-loop confirmation. & Calibrated step-count profile drives repeatable floor-to-floor motion in the prototype. & Integrate KY-024 pins, debouncing, and homing for redundant, timestamped floor-by-floor confirmation. \\
+Door end-position confirmation not integrated (SPDT mounted as a provision). & Timed door-travel profile. & Add end-position detection, timeout handling, and obstruction sensing. \\
+Temperature, vibration, and load are simulated (ADC potentiometers). & Feature envelope and thresholds exercised with simulated proxies. & Replace with calibrated sensors and calibration tables to support defensible maintenance/overload claims. \\
+RFID physical access-control evidence incomplete. & MFRC522 support implemented in firmware. & Capture reader wiring, UID scans, accepted/denied cases, counters, MQTT events, and Ditto security updates. \\
+Unauthorized MQTT publish. & Broker authentication, anonymous access disabled, per-identity ACLs, TLS on the ESP32-side listener. & Password/certificate lifecycle management and network segmentation before deployment. \\
+Browser-to-device command bypass; prototype-level dashboard authentication. & Dashboard has no MQTT command-publish authority; commands use the server-side API, safety gate, audit, Ditto intent, and bridge forwarding. & Server-side identity, RBAC, HTTPS, audit-linked user IDs, and secure cookies. \\
+Credential leakage in workflows. & Secrets excluded from exported workflows and environment templates. & Restricted n8n access, secret manager, and audit-linked credentials. \\
+Replay or duplicate command. & Bridge tracks forwarded command IDs and filters stale intents; gate applies cooldown. & Shared cooldown/command memory for multi-replica deployments. \\
+Unsafe workflow or LLM recommendation. & Workflows may request commands, but the deterministic gate decides; optional LLM output is explanation only. & Prompt/output logging and model governance if LLM explanations are enabled. \\
+Brain~B dispatch challenger is shadow-only. & Logged in shadow mode; cannot become authoritative. & Keep shadow-only until real outcome data, promotion-gate success, a rollback plan, and human approval exist. \\
+Stale or inconsistent operational state. & Gate checks twin freshness; bridge writes Ditto as source of truth; database is historical. & Instrumented clock synchronization and freshness-delay measurements. \\
+Instrumented latency and embedded-resource metrics missing. & Configured intervals and in-process decision-time microbenchmarks captured. & Synchronized end-to-end command, MQTT RTT, Ditto-sync, dispatch, and reconnection timing; ESP32 heap, loop-timing, and TLS-memory logs. \\
+End-to-end command run is a nine-command functional demonstration. & Accept/reject branches and the zero-write invariant observed live; 127 assertions and 20{,}000-sample microbenchmarks cover per-class logic. & Larger live command campaign ($\geq$50 commands, all classes) with aggregate accept/reject statistics. \\
+Audit tables are ordinary database rows. & Command decisions, audit events, and dispatch records persisted. & Retention policy, backups, and tamper-evident or append-only audit export. \\
 \bottomrule
 \end{tabularx}
 \end{table*}
 
+Read as a whole, the table separates two kinds of future work that are often conflated. The security and governance rows are \emph{deployment} hardening: the architectural discipline is in place, but production identity, secret, and certificate management must be added before field use. The sensing, latency, and resource rows are \emph{measurement and instrumentation} work: they convert a software-validated architecture into a quantitatively characterized system without changing its command-authority design.
+
 \section{Conclusion}
 
-This paper condensed a master's thesis platform into a journal-style architecture contribution for trustworthy elevator digital twins. The implemented system connects an ESP32-S3 elevator prototype and simulator to Mosquitto, a Node.js bridge, Eclipse Ditto, PostgreSQL/TimescaleDB, n8n workflows, an adaptive dispatch engine, and a Next.js SCADA dashboard. Its central safety property is architectural: commands are never direct UI-to-device actions. They are audited, safety-gated, written as Ditto intent only when accepted, forwarded by the bridge, and constrained again by device-side interlocks.
+This paper condensed a master's thesis platform into a journal-style architecture contribution for trustworthy elevator digital twins. It advanced three claims, matching the three contributions stated in Section~I. First, the platform is a reproducible, self-hosted supervision architecture connecting an ESP32-S3 elevator prototype and simulator to Mosquitto, a Node.js bridge, Eclipse Ditto, PostgreSQL/TimescaleDB, bounded n8n workflows, an adaptive dispatch engine, and a Next.js SCADA dashboard. Second, its central safety property is a command-authority discipline that is architectural rather than incidental: commands are never direct UI-to-device actions, but are audited, safety-gated, written as Ditto intent only when accepted, forwarded by the bridge, and constrained again by device-side interlocks, so a rejected command mutates no state. Third, this discipline was quantified and shown to be inexpensive.
 
-The validation evidence supports the software and integration claims: 127 automated assertions passed, MQTT authentication and ACLs were exercised, TLS publish/subscribe was demonstrated, Ditto and database exports were captured, and the final command-path run recorded nine live decisions with zero Ditto writes for rejected commands. The deterministic decision paths were also quantified: the safety gate admits a command in a median of 5.7~$\mu$s and adds only about 5.3~$\mu$s over a direct publish. Future work will extend this software-validated architecture with instrumented end-to-end latency, reconnection, Ditto-synchronization, and ESP32 resource measurements, positioning the platform as a safety-first, auditable, bounded-autonomy architecture for smart elevator digital twins.
+The evidence supports these claims at the software and integration levels rather than as certified physical validation. A total of 127 automated assertions passed, MQTT authentication and ACLs were exercised, TLS publish/subscribe was demonstrated, Ditto and database exports were captured, and the final command-path run recorded nine live decisions with zero Ditto writes for rejected commands---an integration-level functional demonstration rather than a statistical robustness sample. The deterministic decision paths were also quantified: the safety gate admits a command in a median of 5.7~$\mu$s and adds about 5.3~$\mu$s over a direct publish, so the discipline imposes negligible computational cost on command logic. Floor position is tracked functionally by calibrated step counting; closed-loop sensor confirmation, a larger live command campaign, instrumented end-to-end latency, and embedded-resource profiling remain future work. Within these boundaries, the platform is offered as a safety-first, auditable, bounded-autonomy architecture for smart-elevator digital twins.
 
 \section*{Data and Artifact Availability}
 
