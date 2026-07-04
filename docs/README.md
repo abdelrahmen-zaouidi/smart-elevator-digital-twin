@@ -57,6 +57,7 @@ ESP32 telemetry layer ─► MQTT ingestion ─► bridge ─► Eclipse Ditto �
 | [features/adaptive-dispatch-engine.md](features/adaptive-dispatch-engine.md) | AI-Adaptive Dispatch Policy Engine (dual-brain champion/challenger), policies, files, how to run, promotion gates. |
 | [n8n-setup.md](n8n-setup.md) | **n8n agent workflows**: import, credentials, activation order, per-workflow Ditto/Postgres write paths, troubleshooting. |
 | [database-analytics.md](database-analytics.md) | TimescaleDB schema, history API routes, dashboard pages, verification commands. |
+| [operations.md](operations.md) | Backup/restore/DR procedures (`scripts/backup.ps1`, `scripts/restore.ps1`), rehearsed drill evidence. |
 | [enterprise-n8n-upgrade-package.md](enterprise-n8n-upgrade-package.md) | Enterprise n8n upgrade package (code-node logic, validation tooling). |
 
 ## SCADA dashboard (ElevatorOS)
