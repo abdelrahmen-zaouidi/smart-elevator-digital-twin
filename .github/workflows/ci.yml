@@ -1,0 +1,80 @@
+# Continuous integration for the Smart Elevator Digital Twin platform.
+#
+# Mirrors the project's manual validation suite (see docs/README.md
+# "Automated checks") so every push enforces what used to be run by hand:
+# safety-gate / dispatch / command-lifecycle assertions, simulator unit
+# tests, MQTT topic hygiene, n8n workflow validation, dashboard type
+# safety + lint + production build, and the two service container builds.
+name: CI
+
+on:
+  push:
+    branches: [main, "feat/**"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-node:
+    name: Node validation suites
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install workspaces
+        run: npm ci
+      - name: Safety gate + dispatch + command lifecycle suites
+        run: npm test
+      - name: n8n workflow package validation
+        run: npm run validate:n8n
+
+  validate-python:
+    name: Python validation suites
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # Same single runtime dependency the simulator image installs
+      # (infra/docker/Dockerfile.simulator).
+      - name: Install simulator dependency
+        run: pip install paho-mqtt
+      - name: Simulator unit tests
+        run: python -m unittest tests.test_simulator -v
+      - name: MQTT topic hygiene
+        run: python scripts/validate_mqtt_topics.py
+
+  dashboard:
+    name: Dashboard typecheck + lint + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install workspaces
+        run: npm ci
+      - name: Type safety
+        run: npm run typecheck
+      - name: Lint (errors fail, warnings are the accepted baseline)
+        run: npm run lint
+      - name: Production build
+        run: npm run build
+
+  docker:
+    name: Service image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build bridge image
+        run: docker build -f infra/docker/Dockerfile.bridge -t elevator-bridge:ci .
+      - name: Build simulator image
+        run: docker build -f infra/docker/Dockerfile.simulator -t elevator-simulator:ci .
