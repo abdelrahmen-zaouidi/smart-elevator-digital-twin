@@ -22,6 +22,7 @@ import {
   PageMonitoring, PageControlPanel, PageAlerts, PageDevices, PageReports,
   PageSettings, PageHelp,
 } from "../src/components/pages";
+import SystemHealthStrip from "./scada/SystemHealthStrip";
 
 
 // SIDEBAR
@@ -297,6 +298,7 @@ function AppTopbar({ page, setPage, state, connected, dittoConnected, dittoMode,
         <input value={search} onChange={event => setSearch(event.target.value)} onKeyDown={event => { if (event.key === "Enter") runSearch(); }} placeholder="Search pages" aria-label="Search pages" />
       </div>
       <div className="eos-topbar-right">
+        <SystemHealthStrip />
         <ConnectionIndicator label={source} active={connected} />
         <ConnectionIndicator label="ESP32-S3" active={microcontroller.connected} detail={microcontroller.status.toLowerCase()} />
         <div className="eos-clock"><Clock size={14} />{clock}</div>
