@@ -440,11 +440,16 @@ class TestDispatchPolicy(unittest.TestCase):
         self.assertNotIn(3, phy._call_queue)
 
     def test_command_payload_applies_policy(self):
+        # handle_command_payload takes the already-parsed dict: JSON decoding
+        # happens once in the MQTT on_message handler (see make_mqtt_client).
         phy, _ = self._phy()
         applied = sim.handle_command_payload(
             phy,
-            '{"command":"DISPATCH_POLICY","policy_id":"ECO_ENERGY",'
-            '"params":{"park_floor":2,"accel_profile":"GENTLE","deep_idle":true}}',
+            {
+                "command": "DISPATCH_POLICY",
+                "policy_id": "ECO_ENERGY",
+                "params": {"park_floor": 2, "accel_profile": "GENTLE", "deep_idle": True},
+            },
         )
         self.assertTrue(applied)
         self.assertEqual(phy.dispatch.policy_id, "ECO_ENERGY")
@@ -453,8 +458,10 @@ class TestDispatchPolicy(unittest.TestCase):
 
     def test_command_payload_ignores_junk(self):
         phy, _ = self._phy()
-        self.assertFalse(sim.handle_command_payload(phy, "not json"))
-        self.assertFalse(sim.handle_command_payload(phy, '{"command":"MOVE_TO_FLOOR"}'))
+        # Non-dict payloads are rejected by the isinstance guard.
+        self.assertFalse(sim.handle_command_payload(phy, "not a dict"))
+        # Recognised-but-non-dispatch commands are acknowledged, not applied.
+        self.assertFalse(sim.handle_command_payload(phy, {"command": "MOVE_TO_FLOOR"}))
         # unchanged
         self.assertEqual(phy.dispatch.policy_id, "SCAN_COLLECTIVE")
 
