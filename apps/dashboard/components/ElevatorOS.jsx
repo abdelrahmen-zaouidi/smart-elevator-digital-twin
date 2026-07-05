@@ -3,6 +3,7 @@
 // commands are submitted through /api/commands and the deterministic safety gate.
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { signIn, signOut, useSession } from "next-auth/react";
 import {
   Bell, BookOpen, Clock, Eye, EyeOff, LogOut, Menu, Moon,
   PanelLeftClose, PanelLeftOpen, Search, Settings, Sun, User, X,
@@ -331,18 +332,34 @@ function LoginPage({ onLogin }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const submit = (event) => {
+  const submit = async (event) => {
     event.preventDefault();
     setError("");
     if (!identifier.trim() || !password.trim()) {
-      setError("Enter any demo username and password to unlock this local dashboard session.");
+      setError("Enter your username and password to sign in.");
       return;
     }
     setLoading(true);
-    setTimeout(() => {
-      onLogin({ identifier: identifier.trim(), remember });
+    // Try real per-user auth (Auth.js credentials) first. On success a session
+    // cookie is set and the server enforces RBAC. If no matching user exists
+    // (fresh/demo setup), fall back to the local demo unlock so the zero-setup
+    // demo still works — the server then treats it as the trusted-local operator.
+    try {
+      const res = await signIn("credentials", {
+        redirect: false,
+        username: identifier.trim(),
+        password,
+      });
+      if (res && !res.error) {
+        onLogin({ identifier: identifier.trim(), remember, authed: true });
+        return;
+      }
+      onLogin({ identifier: identifier.trim(), remember, authed: false });
+    } catch {
+      onLogin({ identifier: identifier.trim(), remember, authed: false });
+    } finally {
       setLoading(false);
-    }, 450);
+    }
   };
 
   return (
@@ -445,6 +462,7 @@ function GlobalStyles() {
       .eos-user-menu button:hover { background: ${T.surfaceHi}; color: ${T.text}; }
       .eos-user-menu button.danger { color: ${T.red}; }
       .eos-page-stack { display: flex; flex-direction: column; gap: 14px; }
+      .eos-readonly-banner { margin: 8px 16px 0; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; color: ${T.yellow}; background: ${T.yellow}18; border: 1px solid ${T.yellow}55; }
       .eos-kpi-grid, .eos-responsive-grid { display: grid; gap: 12px; }
       .eos-kpi-grid { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
       .eos-responsive-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -522,7 +540,7 @@ function GlobalStyles() {
   );
 }
 
-function AuthenticatedElevatorApp({ session, preferences, updatePreferences, profile, updateProfile, onLogout }) {
+function AuthenticatedElevatorApp({ session, authUser, preferences, updatePreferences, profile, updateProfile, onLogout }) {
   applyThemeTokens(preferences.theme);
   const engine = useDigitalTwinEngine();
   const [page, setPage] = useState(PAGE_MAP[preferences.defaultView] ? preferences.defaultView : "twin");
@@ -533,9 +551,21 @@ function AuthenticatedElevatorApp({ session, preferences, updatePreferences, pro
     if (!PAGE_MAP[page]) setPage("twin");
   }, [page]);
 
+  // When a real Auth.js user is signed in, show their identity/role and gate
+  // command controls. Demo/local (no authUser) stays permissive — the server
+  // still enforces RBAC on /api/commands regardless of the UI.
+  const displayProfile = useMemo(
+    () => (authUser?.username
+      ? { ...profile, fullName: authUser.username, role: String(authUser.role || "operator").toUpperCase() }
+      : profile),
+    [authUser, profile],
+  );
+  const canCommand = !authUser
+    || ["operator", "maintainer", "admin"].includes(String(authUser.role || "").toLowerCase());
+
   const requestLogout = useCallback(() => setLogoutConfirmOpen(true), []);
   const setSidebarCollapsed = useCallback((value) => updatePreferences({ sidebarCollapsed: value }), [updatePreferences]);
-  const ctx = useMemo(() => ({ ...engine, preferences, updatePreferences, profile, updateProfile, requestLogout, session }), [engine, preferences, updatePreferences, profile, updateProfile, requestLogout, session]);
+  const ctx = useMemo(() => ({ ...engine, preferences, updatePreferences, profile: displayProfile, updateProfile, requestLogout, session, authUser, canCommand }), [engine, preferences, updatePreferences, displayProfile, updateProfile, requestLogout, session, authUser, canCommand]);
   const PageComponent = PAGE_MAP[page] || PageTwin;
 
   return (
@@ -555,9 +585,14 @@ function AuthenticatedElevatorApp({ session, preferences, updatePreferences, pro
               openMobileNav={() => setMobileNavOpen(true)}
               preferences={preferences}
               updatePreferences={updatePreferences}
-              profile={profile}
+              profile={displayProfile}
               onLogoutRequest={requestLogout}
             />
+            {!canCommand && (
+              <div className="eos-readonly-banner" role="status">
+                Read-only role ({displayProfile.role}). Command controls are disabled; the server rejects command attempts.
+              </div>
+            )}
             <main className="eos-main"><PageComponent /></main>
           </div>
         </div>
@@ -574,6 +609,9 @@ export default function ElevatorOS() {
   const [profile, updateProfile] = useStoredObject("eos-profile", DEFAULT_PROFILE);
   const [session, setSession] = useState(null);
   const [authReady, setAuthReady] = useState(false);
+  // Real per-user identity from Auth.js (null when only the demo unlock is used).
+  const { data: authSession } = useSession();
+  const authUser = authSession?.user || null;
 
   applyThemeTokens(preferences.theme);
 
@@ -619,6 +657,9 @@ export default function ElevatorOS() {
       window.localStorage.removeItem("eos-session");
       window.sessionStorage.removeItem("eos-session");
     } catch {}
+    // Clear the Auth.js session cookie too (no redirect — the shell re-renders
+    // the login screen from the cleared local session).
+    signOut({ redirect: false }).catch(() => {});
     setSession(null);
   }, []);
 
@@ -635,5 +676,5 @@ export default function ElevatorOS() {
     return <><LoginPage onLogin={handleLogin} /><GlobalStyles /></>;
   }
 
-  return <AuthenticatedElevatorApp session={session} preferences={preferences} updatePreferences={updatePreferences} profile={profile} updateProfile={updateProfile} onLogout={handleLogout} />;
+  return <AuthenticatedElevatorApp session={session} authUser={authUser} preferences={preferences} updatePreferences={updatePreferences} profile={profile} updateProfile={updateProfile} onLogout={handleLogout} />;
 }

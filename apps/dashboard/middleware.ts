@@ -55,8 +55,8 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  // Gate the app and APIs; skip Next.js internals, static assets, and the
-  // read-only Prometheus metrics endpoint (no secrets; conventionally
-  // unauthenticated so an in-network scraper can reach it).
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/system/metrics).*)"],
+  // Gate the app and APIs; skip Next.js internals, static assets, the
+  // read-only Prometheus metrics endpoint, and the Auth.js endpoints (the
+  // per-user sign-in flow must be reachable through the demo tunnel).
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/system/metrics|api/auth).*)"],
 };

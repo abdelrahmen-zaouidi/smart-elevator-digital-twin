@@ -259,7 +259,14 @@ docker exec -i elevator_db psql -U admin -d smart_building \
   < infra/postgres/migrations/007_access_control_log.sql
 docker exec -i elevator_db psql -U admin -d smart_building \
   < infra/postgres/migrations/008_telemetry_retention.sql
+docker exec -i elevator_db psql -U admin -d smart_building \
+  < infra/postgres/migrations/010_dashboard_users.sql
 ```
+
+`010_dashboard_users.sql` is additive (a users table + nullable audit columns)
+and backs per-user dashboard auth + RBAC — set `AUTH_SECRET` and create users
+with `scripts/create-dashboard-user.mjs` (see
+[docs/operations.md](docs/operations.md#per-user-accounts--rbac-authjs)).
 
 `009_hypertable_conversion.sql` is a **coordinated cutover, not a plain
 migration** — it changes `telemetry_raw`'s primary key and must be applied

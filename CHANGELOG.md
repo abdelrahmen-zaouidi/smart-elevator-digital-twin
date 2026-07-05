@@ -32,6 +32,13 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
     observability up -d` starts Prometheus (7-day retention, ≤300 MB) +
     Grafana with a provisioned ElevatorOS overview dashboard. Bridge gains a
     `/health` port + compose healthcheck.
+  - Per-user auth + RBAC: Auth.js (NextAuth v5) credentials provider backed by
+    a bcrypt `dashboard_users` table (migration 010). Roles
+    viewer/operator/maintainer/admin; `/api/commands` enforces them
+    server-side (viewer → 403 before the gate) and stamps the audit row with
+    the user. The HTTP Basic gate remains the outer demo-tunnel layer.
+    Verified live (viewer 403 / operator 200 + attribution) and in Vitest;
+    seed via `scripts/create-dashboard-user.mjs`.
 
 ## [1.0.0] - 2026-07-04
 

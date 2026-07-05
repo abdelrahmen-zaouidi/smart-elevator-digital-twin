@@ -11,6 +11,13 @@ vi.mock("../../../src/server/db.js", () => ({
   ping: vi.fn(async () => ({ ok: true, latency_ms: 1 })),
 }));
 
+// Auth.js session is injected per-test via this mock. Default: no session
+// (so the route falls back to the Basic / trusted-local principal).
+let mockSession = null;
+vi.mock("../../../auth.js", () => ({
+  auth: vi.fn(async () => mockSession),
+}));
+
 const THING_ID = "building:floor1:elevator";
 
 // A twin snapshot the gate treats as healthy + fresh (door closed, idle,
@@ -58,6 +65,7 @@ function postRequest(body, headers = {}) {
 let route;
 beforeEach(async () => {
   vi.resetModules();
+  mockSession = null; // default: no Auth.js session
   // Trusted-local boundary: no dashboard password configured -> auth passes.
   delete process.env.DASHBOARD_BASIC_AUTH_PASS;
   process.env.DITTO_URL = "http://ditto.test:8080";
@@ -119,5 +127,33 @@ describe("POST /api/commands", () => {
     installFetchMock();
     const res = await guarded.POST(postRequest({ command: "OPEN_DOOR", reason: "x" }));
     expect(res.status).toBe(401);
+  });
+
+  it("RBAC: a viewer session is blocked with 403 BEFORE the gate (zero Ditto writes)", async () => {
+    mockSession = { user: { id: "2", username: "view_test", role: "viewer" } };
+    const { putUrls } = installFetchMock();
+    const res = await route.POST(postRequest({ command: "OPEN_DOOR", reason: "rbac" }));
+    const data = await res.json();
+    expect(res.status).toBe(403);
+    expect(data.error).toMatch(/viewer.*not permitted/i);
+    expect(putUrls).toHaveLength(0);
+  });
+
+  it("RBAC: an operator session may issue commands and is attributed in the audit row", async () => {
+    mockSession = { user: { id: "1", username: "op_test", role: "operator" } };
+    const db = await import("../../../src/server/db.js");
+    const { putUrls } = installFetchMock();
+    const res = await route.POST(postRequest({ command: "OPEN_DOOR", reason: "rbac" }));
+    const data = await res.json();
+    expect(res.status).toBe(200);
+    expect(data.accepted).toBe(true);
+    expect(putUrls.length).toBeGreaterThan(0);
+    // The control_command_log INSERT carries the authenticated identity
+    // (username is the last-but-... param; assert the call included it).
+    const insertCall = db.query.mock.calls.find(
+      ([sql]) => typeof sql === "string" && sql.includes("INSERT INTO control_command_log"),
+    );
+    expect(insertCall).toBeTruthy();
+    expect(insertCall[1]).toContain("op_test"); // username persisted
   });
 });

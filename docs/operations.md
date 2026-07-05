@@ -174,6 +174,28 @@ The dashboard runs on the host, so Prometheus scrapes it via
 `host.docker.internal:3000`; the bridge is scraped in-network at `bridge:9464`.
 Tear down with `docker compose --profile observability down`.
 
+## Per-user accounts + RBAC (Auth.js)
+
+Dashboard sign-in uses Auth.js (NextAuth v5) credentials against the
+`dashboard_users` table (migration 010, bcrypt). Setup:
+
+1. Apply migration 010 (additive, safe):
+   `docker exec -i elevator_db psql -U admin -d smart_building < infra/postgres/migrations/010_dashboard_users.sql`
+2. Set `AUTH_SECRET` in `apps/dashboard/.env.local`
+   (`node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`).
+3. Create users (bcrypt-hashed; never committed):
+   `node scripts/create-dashboard-user.mjs <username> <role> [password]`
+   roles: `viewer | operator | maintainer | admin`.
+
+`POST /api/commands` enforces RBAC server-side: a `viewer` is rejected with
+403 before the safety gate; `operator`+ reach the gate; the audit row records
+the authenticated `username`/`user_id`. The HTTP Basic-Auth middleware remains
+the outer demo-tunnel gate (both coexist). Without a session (API clients,
+local dev), the route falls back to the Basic/trusted-local operator identity.
+n8n user management is enabled (`N8N_USER_MANAGEMENT_DISABLED=false`) — set the
+owner account once in the n8n UI. Evidence:
+`evidence/ops/rbac-auth-2026-07-05.md`.
+
 ## Known limitations / roadmap ties
 
 - The ~1 GB SQL dump is dominated by per-row JSON payloads + bloat in

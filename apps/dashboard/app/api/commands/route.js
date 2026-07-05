@@ -29,8 +29,30 @@ import {
 import { query } from "../../../src/server/db.js";
 import { log } from "../../../src/server/log.js";
 import { metrics } from "../../../src/server/metrics.js";
+import { auth } from "../../../auth.js";
+import { canIssueCommands, normalizeRole } from "../../../src/server/authRoles.js";
 
 export const dynamic = "force-dynamic";
+
+// Resolve the acting principal: prefer a per-user Auth.js session (RBAC),
+// fall back to the existing HTTP Basic / trusted-local-boundary identity so
+// API clients, tests, and local dev keep working. Never throws.
+async function resolvePrincipal(request) {
+  try {
+    const session = await auth();
+    if (session?.user?.username) {
+      return {
+        subject: session.user.username,
+        user_id: session.user.id ?? null,
+        role: normalizeRole(session.user.role),
+        authentication: "AUTHJS_SESSION",
+      };
+    }
+  } catch {
+    // No session / auth unavailable -> fall through to Basic.
+  }
+  return resolveDashboardPrincipal(request);
+}
 
 const DITTO_URL = (
   process.env.DITTO_URL ||
@@ -162,14 +184,14 @@ async function persistDecision(decision, thingId, dittoWriteStatus, auditStatus)
       current_floor, target_floor, door_state, emergency_stop, load_kg,
       decision, accepted, status, rejection_reasons, safety_snapshot,
       raw_command, ditto_payload, ditto_path, ditto_write_status,
-      audit_status, metadata
+      audit_status, metadata, user_id, username
     ) VALUES (
       $1, $2, $3, $4, $5,
       $6, $7, $8, $9, $10, $11,
       $12, $13, $14, $15, $16,
       $17, $18, $19, $20::jsonb, $21::jsonb,
       $22::jsonb, $23::jsonb, $24, $25,
-      $26, $27::jsonb
+      $26, $27::jsonb, $28, $29
     )
     ON CONFLICT (command_id) DO UPDATE SET
       ditto_write_status = EXCLUDED.ditto_write_status,
@@ -220,6 +242,10 @@ async function persistDecision(decision, thingId, dittoWriteStatus, auditStatus)
       audit_severity: decision.audit_severity,
       safety_gate_version: SAFETY_GATE_VERSION,
     }),
+    // RBAC audit attribution (migration 010). username == requested_by; user_id
+    // is present only for Auth.js-session commands (null for Basic/local/agent).
+    decision.user_id ?? decision.raw_command?.user_id ?? null,
+    decision.requested_by ?? null,
   ];
   const result = await query(sql, params);
   return result.rows[0];
@@ -499,7 +525,7 @@ export async function POST(request) {
     }, { status: 400 });
   }
 
-  const principal = resolveDashboardPrincipal(request);
+  const principal = await resolvePrincipal(request);
   if (!principal) {
     return NextResponse.json({
       ok: false,
@@ -510,12 +536,26 @@ export async function POST(request) {
     });
   }
 
+  // RBAC: a viewer may not issue commands. Enforced server-side BEFORE the
+  // safety gate runs — the gate keeps deterministic authority over admission,
+  // RBAC controls who may reach it at all.
+  if (!canIssueCommands(principal.role)) {
+    log.warn("command blocked by RBAC", {
+      event: "command_rbac_denied", requested_by: principal.subject, role: principal.role,
+    });
+    return NextResponse.json({
+      ok: false,
+      error: `Role '${principal.role}' is not permitted to issue commands`,
+    }, { status: 403 });
+  }
+
   const trustedCommand = {
     ...body,
     source: "dashboard",
     source_agent: principal.subject,
     requested_by: principal.subject,
     role: principal.role,
+    user_id: principal.user_id ?? null,
     metadata: {
       ...(body.metadata && typeof body.metadata === "object" ? body.metadata : {}),
       authenticated_by: principal.authentication,
