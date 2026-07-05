@@ -52,7 +52,7 @@ jobs:
         run: python scripts/validate_mqtt_topics.py
 
   dashboard:
-    name: Dashboard typecheck + lint + build
+    name: Dashboard tests + typecheck + lint + build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -62,6 +62,8 @@ jobs:
           cache: npm
       - name: Install workspaces
         run: npm ci
+      - name: Unit + route tests (Vitest)
+        run: npm run test:dashboard
       - name: Type safety
         run: npm run typecheck
       - name: Lint (errors fail, warnings are the accepted baseline)

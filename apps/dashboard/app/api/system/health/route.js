@@ -21,6 +21,7 @@
 import { NextResponse } from "next/server";
 import net from "node:net";
 import { ping } from "../../../../src/server/db.js";
+import { deriveBridge, overallStatus } from "../../../../src/server/healthHelpers.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -81,26 +82,6 @@ async function probeDitto() {
   return { status: "ok", detail: `thing ${THING_ID} readable`, thing };
 }
 
-function deriveBridge(ditto) {
-  if (ditto.status !== "ok" || !ditto.thing) {
-    return { status: "degraded", latency_ms: null, detail: "cannot assess: Ditto unreachable (bridge writes through Ditto)" };
-  }
-  const props = ditto.thing?.features?.microcontroller?.properties || {};
-  const lastSeen = Date.parse(props.last_telemetry_at || "") || Date.parse(props.last_status_at || "") || 0;
-  if (!lastSeen) {
-    return { status: "degraded", latency_ms: null, detail: "no telemetry timestamps in twin yet (heuristic: fresh twin = live bridge)" };
-  }
-  const ageMs = Date.now() - lastSeen;
-  if (ageMs <= OFFLINE_AFTER_MS * 2) {
-    return { status: "ok", latency_ms: null, detail: `twin fresh (${Math.round(ageMs / 1000)}s old) — bridge merging` };
-  }
-  return {
-    status: "degraded",
-    latency_ms: null,
-    detail: `no telemetry for ${Math.round(ageMs / 1000)}s — device offline or bridge down (heuristic)`,
-  };
-}
-
 async function probePostgres() {
   const result = await ping();
   return result.ok
@@ -127,14 +108,6 @@ async function probeN8n() {
   return { status: "degraded", detail: `HTTP ${res.status} from ${N8N_HEALTH_URL}` };
 }
 
-function overallStatus(checks) {
-  const values = Object.values(checks).map((c) => c.status);
-  if (values.every((s) => s === "ok")) return "ok";
-  // The platform is only truly dead when both the twin and ingestion are gone.
-  if (checks.ditto.status === "down" && checks.mqtt.status === "down") return "down";
-  return "degraded";
-}
-
 export async function GET() {
   const g = globalThis;
   if (g._systemHealthCache && Date.now() - g._systemHealthCache.at < CACHE_TTL_MS) {
@@ -147,7 +120,7 @@ export async function GET() {
     timed(probeMqtt),
     timed(probeN8n),
   ]);
-  const bridge = deriveBridge(ditto);
+  const bridge = deriveBridge(ditto, OFFLINE_AFTER_MS);
   delete ditto.thing; // internal detail, not part of the response contract
 
   const checks = { ditto, bridge, mqtt, postgres, n8n };
