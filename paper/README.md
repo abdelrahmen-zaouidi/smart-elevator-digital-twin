@@ -75,3 +75,31 @@ or citations:
   "without hesitation", "unusually explicit"); floor detection reframed as
   functional open-loop step counting, with KY-024/SPDT as future closed-loop
   confirmation.
+
+### Revision v3 (final polish + live campaign), 2026-07-05
+
+- **Live command campaign (GAPS M10) executed and integrated**: 57 commands
+  via POST /api/commands on the full live stack; 28 accepted / 29 rejected;
+  zero-write invariant on 29/29 rejections, DB cross-verified
+  (`evidence/command-campaign/`). §V-C, Tables VI/VIII, abstract, and
+  conclusion now carry the real campaign numbers; the earlier "not a
+  statistical sample" framing was upgraded to "integration-level functional
+  coverage" with fault-injection/soak runs as the remaining future work.
+- **Abstract compressed to 248 words** answering problem → solution →
+  validated → limits.
+- **Typography/visual pass**: Fig. 2 node overflows fixed (scriptsize code
+  tokens, breakpoints, wider gate node and accept gap); Fig. 4 padding; Fig. 6
+  y-tick collision (0.95/1) resolved; Eq. (1) rebalanced; long MQTT topic and
+  filename tokens given breakpoints; table hyphenation defects fixed
+  ("ratio-nale", "dash-board", "re-lease", "Ta-ble VII", "valida-tion", …);
+  Table VI columns rebalanced. `pdflatex` now reports **0 overfull hboxes**.
+- **Front matter**: "Pending author permission" removed from both figure
+  captions (figures are included); running head updated to July 2026; sole
+  corresponding author (Zaouidi); e-mails lowercased; Médéa accents unified;
+  GitHub repository URL inserted in Data and Artifact Availability; all
+  `TODO(human)` markers resolved and removed.
+- **Bibliography**: protected capitalization ({Eclipse Ditto}, {Eclipse
+  Mosquitto}, {Web of Things}, {U.S. Air Force}).
+- **Interpretation added** after Tables IV and V; TLS-overhead and
+  assertion-suite results now carry proves/matters/links sentences.
+- Now 13 pages (content growth from interpretations + campaign section).

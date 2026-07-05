@@ -72,16 +72,26 @@ This file tracks placeholders and unresolved submission tasks in `main.tex`.
   - Repeat at least 10 runs in both directions.
   - Report mean, standard deviation, min, and max; keep the current `~6 s` value labeled as author-recorded until this is complete.
 
-- [ ] M10 - Larger live command-path campaign (system-level robustness).
-  - Bring up the full Docker stack (dashboard, Ditto, TimescaleDB, n8n, bridge,
-    Mosquitto, authenticated simulator) and drive at least 50 commands covering
-    every gate rule family (accepted and rejected classes).
-  - Export the `control_command_log` / `audit_log` rows and aggregate
-    accept/reject counts per command class, plus the share of rejected commands
-    with `ditto_write_status = SKIPPED` (must be 100%).
-  - Replaces the current nine-command demonstration with aggregate statistics;
-    until then the paper labels the live run as an integration-level functional
-    demonstration, not a statistical sample.
+- [x] M10 - Larger live command-path campaign — **DONE 2026-07-05.**
+  - Harness: `scripts/validation/live-command-campaign.mjs` (POST /api/commands
+    only; never bypasses the gate; simulator run with
+    `SIM_ANOMALY_PROFILE=disabled` for reproducibility).
+  - Result: 57 commands, 28 accepted / 29 rejected, 0 transport errors,
+    0 expected-decision mismatches; zero-write invariant on 29/29 rejections;
+    28/28 accepted Ditto writes SUCCEEDED; DB cross-verified
+    (`evidence/command-campaign/campaign-2026-07-05*` +
+    `campaign-2026-07-05-db-verification.txt`).
+  - Eight rule families exercised live (catalog, required fields, reason,
+    confirmation, mode guards via full e-stop/lockdown/maintenance cycles,
+    bounds, payload/policy validity, cooldown). The initial execution
+    (`campaign-2026-07-04*`) additionally shows the door-open interlock
+    rejecting four MOVE_TO_FLOOR requests live.
+  - Side finding fixed: rejected commands with a non-integer `target_floor`
+    crashed the decision INSERT (integer column) and lost their audit trace;
+    the route now coerces non-integer target floors to NULL for the column
+    (raw_command keeps the original payload).
+  - Remaining (new future work): fault-injection campaigns (broker/twin outage,
+    stale twin, overload) and long-duration soak runs.
 
 ## Citation and Metadata Tasks
 
