@@ -86,14 +86,14 @@ jobs:
       # Fail only on CRITICAL vulnerabilities that have a fix available — keeps
       # the gate actionable rather than noisy.
       - name: Trivy scan (bridge)
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: elevator-bridge:ci
           severity: CRITICAL
           ignore-unfixed: true
           exit-code: "1"
       - name: Trivy scan (simulator)
-        uses: aquasecurity/trivy-action@0.24.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: elevator-simulator:ci
           severity: CRITICAL
