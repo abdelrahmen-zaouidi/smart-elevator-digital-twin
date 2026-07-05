@@ -6,6 +6,12 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Phase 2 (enterprise hardening) — in progress:**
+  - Dashboard test harness: Vitest unit + hermetic `/api/commands` route
+    tests (33 assertions incl. the reject-zero-Ditto-write invariant), wired
+    into `npm run validate` + CI; opt-in Playwright smoke against a live stack.
+
 ## [1.0.0] - 2026-07-04
 
 First tagged release: the complete thesis-grade platform — ESP32-S3 firmware
