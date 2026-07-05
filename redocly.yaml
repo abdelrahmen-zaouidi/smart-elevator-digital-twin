@@ -1,0 +1,14 @@
+# Redocly config for the ElevatorOS OpenAPI spec.
+# The `minimal` ruleset enforces structural validity (valid 3.1, resolvable
+# $refs, correct types) without the opinionated style rules (mandatory
+# operationId / per-operation security / non-localhost servers) that would make
+# the CI gate noisy for an internal, self-hosted API.
+apis:
+  dashboard:
+    root: docs/api/openapi.yaml
+extends:
+  - minimal
+rules:
+  operation-4xx-response: off
+  no-server-example.com: off
+  security-defined: off

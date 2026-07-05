@@ -34,6 +34,8 @@ jobs:
         run: npm test
       - name: n8n workflow package validation
         run: npm run validate:n8n
+      - name: OpenAPI spec validation
+        run: npm run openapi:lint
 
   validate-python:
     name: Python validation suites

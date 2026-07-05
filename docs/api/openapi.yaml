@@ -1,0 +1,161 @@
+openapi: 3.1.0
+info:
+  title: ElevatorOS Dashboard API
+  version: 1.0.0
+  description: >
+    Server-side API of the ElevatorOS SCADA dashboard. The command endpoint is
+    the single safety-gated write path to the digital twin; all other write
+    paths described here go through Eclipse Ditto. History/metrics/health
+    endpoints are read-only. Every non-2xx response uses the uniform error
+    envelope `{ error: { code, message, details? } }`.
+  license:
+    name: Apache-2.0
+servers:
+  - url: http://localhost:3000
+    description: Local dashboard (npm run dev / next start)
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+      description: Outer demo-tunnel gate (active when DASHBOARD_BASIC_AUTH_PASS is set).
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: authjs.session-token
+      description: Auth.js per-user session; carries the RBAC role.
+  responses:
+    ErrorResponse:
+      description: Uniform error envelope
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, example: VALIDATION }
+            message: { type: string }
+            details: { type: object, additionalProperties: true }
+    CommandRequest:
+      type: object
+      required: [command]
+      properties:
+        command:
+          type: string
+          example: MOVE_TO_FLOOR
+        reason:
+          oneOf:
+            - type: string
+            - type: array
+              items: { type: string }
+        target_floor: { type: integer, example: 2 }
+        thing_id: { type: string, example: "building:floor1:elevator" }
+        human_approved: { type: boolean }
+        confirmation: { type: boolean }
+        policy_id: { type: string }
+      additionalProperties: true
+    CommandDecision:
+      type: object
+      description: Safety-gate decision (HTTP 200 whether accepted or rejected).
+      properties:
+        ok: { type: boolean }
+        accepted: { type: boolean }
+        command_id: { type: string }
+        correlation_id: { type: string }
+        command: { type: string }
+        rejection_reasons:
+          type: array
+          items: { type: string }
+        ditto_write_status:
+          type: string
+          enum: [SUCCEEDED, PARTIAL, FAILED, SKIPPED]
+    HealthResponse:
+      type: object
+      properties:
+        status: { type: string, enum: [ok, degraded, down] }
+        ts: { type: string, format: date-time }
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status: { type: string, enum: [ok, degraded, down] }
+              latency_ms: { type: [integer, "null"] }
+              detail: { type: string }
+paths:
+  /api/commands:
+    post:
+      summary: Submit a command against the twin (deterministic safety gate)
+      description: >
+        Validates the payload, resolves the principal (Auth.js session or the
+        Basic/local fallback), enforces RBAC (viewer → 403), rate-limits per
+        user+IP, then runs the deterministic safety gate. A rejected command is
+        returned with HTTP 200 and `accepted:false` and performs no Ditto write.
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CommandRequest" }
+      responses:
+        "200":
+          description: Gate decision (accepted or rejected)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommandDecision" }
+        "400": { $ref: "#/components/responses/ErrorResponse" }
+        "401": { $ref: "#/components/responses/ErrorResponse" }
+        "403": { $ref: "#/components/responses/ErrorResponse" }
+        "429": { $ref: "#/components/responses/ErrorResponse" }
+    get:
+      summary: Command catalogue + gate configuration
+      responses:
+        "200": { description: Catalogue and safety-gate config }
+  /api/system/health:
+    get:
+      summary: Aggregate platform health
+      responses:
+        "200":
+          description: Health of every platform dependency
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HealthResponse" }
+  /api/system/metrics:
+    get:
+      summary: Prometheus metrics (text exposition; unauthenticated)
+      responses:
+        "200":
+          description: Prometheus exposition format
+          content:
+            text/plain: {}
+  /api/access-control/tags:
+    get:
+      summary: List authorized RFID tags
+      responses:
+        "200": { description: Tags list }
+    post:
+      summary: Create or update an authorized RFID tag
+      security:
+        - basicAuth: []
+          sessionCookie: []
+      responses:
+        "200": { description: Tag upserted }
+        "400": { $ref: "#/components/responses/ErrorResponse" }
+  /api/history/telemetry:
+    get:
+      summary: Telemetry history (read-only, TimescaleDB)
+      responses:
+        "200": { description: Telemetry rows }
+  /api/history/summary:
+    get:
+      summary: Rolled-up history summary (read-only)
+      responses:
+        "200": { description: Summary counters }

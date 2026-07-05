@@ -17,6 +17,7 @@
     "test:python": "python -X utf8 -m unittest tests.test_simulator -v",
     "validate:topics": "python -X utf8 scripts/validate_mqtt_topics.py",
     "validate:n8n": "node scripts/validate_n8n_upgrade_package.js",
+    "openapi:lint": "npx --yes @redocly/cli@1.25.11 lint docs/api/openapi.yaml",
     "typecheck": "npm run typecheck --workspace apps/dashboard",
     "lint": "npm run lint --workspace apps/dashboard",
     "build": "npm run build --workspace apps/dashboard",

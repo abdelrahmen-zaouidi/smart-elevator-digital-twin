@@ -39,6 +39,11 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
     the user. The HTTP Basic gate remains the outer demo-tunnel layer.
     Verified live (viewer 403 / operator 200 + attribution) and in Vitest;
     seed via `scripts/create-dashboard-user.mjs`.
+  - API maturity: uniform error envelope `{error:{code,message,details}}`, zod
+    input validation on `/api/commands` (malformed → 400 VALIDATION), and an
+    in-memory per-user+IP token-bucket rate limit (429 + Retry-After, separate
+    from the gate cooldown). OpenAPI 3.1 spec at `docs/api/openapi.yaml`
+    validated in CI (`npm run openapi:lint`).
 
 ## [1.0.0] - 2026-07-04
 

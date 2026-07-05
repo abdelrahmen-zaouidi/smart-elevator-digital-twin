@@ -65,6 +65,7 @@ function postRequest(body, headers = {}) {
 let route;
 beforeEach(async () => {
   vi.resetModules();
+  globalThis._rateBuckets?.clear(); // isolate rate-limit state between tests
   mockSession = null; // default: no Auth.js session
   // Trusted-local boundary: no dashboard password configured -> auth passes.
   delete process.env.DASHBOARD_BASIC_AUTH_PASS;
@@ -135,8 +136,32 @@ describe("POST /api/commands", () => {
     const res = await route.POST(postRequest({ command: "OPEN_DOOR", reason: "rbac" }));
     const data = await res.json();
     expect(res.status).toBe(403);
-    expect(data.error).toMatch(/viewer.*not permitted/i);
+    expect(data.error.message).toMatch(/viewer.*not permitted/i);
+    expect(data.error.code).toBe("FORBIDDEN");
     expect(putUrls).toHaveLength(0);
+  });
+
+  it("returns the 400 VALIDATION envelope for a malformed command payload", async () => {
+    installFetchMock();
+    // `command` must be a non-empty string; here it is a number.
+    const res = await route.POST(postRequest({ command: 123 }));
+    const data = await res.json();
+    expect(res.status).toBe(400);
+    expect(data.error.code).toBe("VALIDATION");
+    expect(data.error.details).toBeTruthy();
+  });
+
+  it("rate-limits after the burst is exhausted (429 + Retry-After envelope)", async () => {
+    installFetchMock();
+    // Burst capacity is 5; the 6th command in a burst is limited.
+    let last;
+    for (let i = 0; i < 6; i += 1) {
+      last = await route.POST(postRequest({ command: "OPEN_DOOR", reason: `burst-${i}` }));
+    }
+    const data = await last.json();
+    expect(last.status).toBe(429);
+    expect(data.error.code).toBe("RATE_LIMITED");
+    expect(last.headers.get("Retry-After")).toBeTruthy();
   });
 
   it("RBAC: an operator session may issue commands and is attributed in the audit row", async () => {

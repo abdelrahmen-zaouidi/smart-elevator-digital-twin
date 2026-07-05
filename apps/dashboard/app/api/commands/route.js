@@ -31,6 +31,12 @@ import { log } from "../../../src/server/log.js";
 import { metrics } from "../../../src/server/metrics.js";
 import { auth } from "../../../auth.js";
 import { canIssueCommands, normalizeRole } from "../../../src/server/authRoles.js";
+import { badRequest, validationError, unauthorized, forbidden, rateLimited } from "../../../src/server/apiError.js";
+import { takeToken } from "../../../src/server/rateLimit.js";
+import { commandInputSchema, zodDetails } from "../../../src/server/commandSchema.js";
+
+const RATE_CAPACITY = Number.parseInt(process.env.COMMAND_RATE_BURST || "5", 10);
+const RATE_PER_SEC = Number.parseFloat(process.env.COMMAND_RATE_PER_SEC || "0.1667"); // ~10/min
 
 export const dynamic = "force-dynamic";
 
@@ -519,20 +525,20 @@ export async function POST(request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({
-      ok: false,
-      error: "Invalid JSON body",
-    }, { status: 400 });
+    return badRequest("Invalid JSON body");
   }
+
+  // Transport-level input validation (in front of the safety gate).
+  const parsed = commandInputSchema.safeParse(body);
+  if (!parsed.success) {
+    return validationError("Invalid command payload", zodDetails(parsed.error));
+  }
+  body = parsed.data;
 
   const principal = await resolvePrincipal(request);
   if (!principal) {
-    return NextResponse.json({
-      ok: false,
-      error: "Dashboard operator authentication required",
-    }, {
-      status: 401,
-      headers: { "WWW-Authenticate": 'Basic realm="ElevatorOS Commands", charset="UTF-8"' },
+    return unauthorized("Dashboard operator authentication required", {
+      "WWW-Authenticate": 'Basic realm="ElevatorOS Commands", charset="UTF-8"',
     });
   }
 
@@ -543,10 +549,15 @@ export async function POST(request) {
     log.warn("command blocked by RBAC", {
       event: "command_rbac_denied", requested_by: principal.subject, role: principal.role,
     });
-    return NextResponse.json({
-      ok: false,
-      error: `Role '${principal.role}' is not permitted to issue commands`,
-    }, { status: 403 });
+    return forbidden(`Role '${principal.role}' is not permitted to issue commands`);
+  }
+
+  // Rate limit per user+IP (in-memory token bucket; single-instance host).
+  const clientIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "local";
+  const rl = takeToken(`${principal.subject}:${clientIp}`, RATE_CAPACITY, RATE_PER_SEC);
+  if (!rl.allowed) {
+    log.warn("command rate limited", { event: "command_rate_limited", requested_by: principal.subject });
+    return rateLimited("Too many commands; slow down", rl.retryAfter);
   }
 
   const trustedCommand = {
