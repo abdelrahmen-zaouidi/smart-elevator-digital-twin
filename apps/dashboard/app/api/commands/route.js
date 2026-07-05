@@ -28,6 +28,7 @@ import {
 } from "@smart-elevator/shared/commandLifecycle.js";
 import { query } from "../../../src/server/db.js";
 import { log } from "../../../src/server/log.js";
+import { metrics } from "../../../src/server/metrics.js";
 
 export const dynamic = "force-dynamic";
 
@@ -487,6 +488,7 @@ function buildBridgeFanoutResult(writeResult, hasCommandIntent) {
 // POST handler.
 // ---------------------------------------------------------------------------
 export async function POST(request) {
+  const endRoundtrip = metrics.commandRoundtrip.startTimer();
   let body;
   try {
     body = await request.json();
@@ -543,6 +545,11 @@ export async function POST(request) {
     role: principal.role,
     reason: decision.accepted ? undefined : decision.rejection_reasons,
   });
+  metrics.gateDecisions.inc({
+    verdict: decision.accepted ? "accepted" : "rejected",
+    command: decision.command || "UNKNOWN",
+  });
+  endRoundtrip({ accepted: String(Boolean(decision.accepted)) });
 
   // 3. Persist & audit BEFORE any Ditto write — the decision must always
   //    leave a trace, regardless of write success/failure.

@@ -3,6 +3,7 @@ const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
 const log = require("./logger");
+const metrics = require("./metrics");
 
 function loadEnvFile(filePath, { override = false } = {}) {
   if (!fs.existsSync(filePath)) return;
@@ -816,10 +817,12 @@ function isDittoNotFound(error) {
 async function mergeThingWithRetry(path, patch, retries = 3) {
   const serializedPatch = JSON.stringify(patch);
   if (lastSerializedByPath.get(path) === serializedPatch) {
+    metrics.dittoMergeTotal.inc({ result: "skipped" });
     return "skipped";
   }
 
   let lastError;
+  const endTimer = metrics.dittoMergeDuration.startTimer();
 
   for (let attempt = 1; attempt <= retries; attempt += 1) {
     try {
@@ -827,6 +830,8 @@ async function mergeThingWithRetry(path, patch, retries = 3) {
         headers: { "Content-Type": "application/merge-patch+json" },
       });
       lastSerializedByPath.set(path, serializedPatch);
+      endTimer();
+      metrics.dittoMergeTotal.inc({ result: "written" });
       return "written";
     } catch (error) {
       // Merge requires the thing to already exist. On a fresh twin, create it
@@ -834,6 +839,8 @@ async function mergeThingWithRetry(path, patch, retries = 3) {
       if (isDittoNotFound(error)) {
         await dittoClient.put(path, patch);
         lastSerializedByPath.set(path, serializedPatch);
+        endTimer();
+        metrics.dittoMergeTotal.inc({ result: "written" });
         return "written";
       }
       lastError = error;
@@ -844,6 +851,8 @@ async function mergeThingWithRetry(path, patch, retries = 3) {
     }
   }
 
+  endTimer();
+  metrics.dittoMergeTotal.inc({ result: "failed" });
   throw lastError;
 }
 
@@ -1227,6 +1236,7 @@ function publishMqttCommand(thingId, command, onPublished, onError) {
     log.warn("MQTT not connected, dropping command", {
       event: "command_dropped", thing_id: thingId, command_id: commandId, command,
     });
+    metrics.commandLifecycle.inc({ event: "dropped" });
     if (typeof onError === "function") onError(new Error("MQTT not connected"));
     return false;
   }
@@ -1242,6 +1252,7 @@ function publishMqttCommand(thingId, command, onPublished, onError) {
       log.info("command published to device", {
         event: "command_mqtt_published", thing_id: thingId, command_id: commandId, topic,
       });
+      metrics.commandLifecycle.inc({ event: "mqtt_published" });
       if (typeof onPublished === "function") onPublished();
     }
   });
@@ -1306,6 +1317,7 @@ async function markCommandTimedOut(thingId, commandId) {
       thing_id: thingId,
       command_id: commandId,
     });
+    metrics.commandLifecycle.inc({ event: "ack_timeout" });
   } catch (error) {
     log.warn("[Bridge] Failed to persist command timeout:", error.message);
   }
@@ -1616,6 +1628,7 @@ function publishCommandIntent(thingId, intent, source) {
     command_id: commandId,
     command: command.command,
   });
+  metrics.commandLifecycle.inc({ event: "intent_forwarded" });
   return true;
 }
 
@@ -1697,6 +1710,7 @@ async function pushDeviceCommandResultToDitto(topic, payload) {
     command_id: commandId,
     status,
   });
+  metrics.commandLifecycle.inc({ event: "ack_received" });
   return true;
 }
 
@@ -1844,6 +1858,9 @@ async function startBridge() {
     legacyLeafCommandForwarding: LEGACY_LEAF_COMMAND_FORWARDING_ENABLED,
   });
 
+  // Prometheus /metrics + /health on an internal port (scraped in-network).
+  metrics.startMetricsServer(Number(process.env.METRICS_PORT || 9464), log);
+
   mqttClient = mqtt.connect(MQTT_URL, {
     reconnectPeriod: 2000,
     connectTimeout: 15000,
@@ -1869,6 +1886,7 @@ async function startBridge() {
 
   mqttClient.on("reconnect", () => {
     log.warn("[Bridge] reconnecting to MQTT...");
+    metrics.mqttReconnects.inc();
   });
 
   mqttClient.on("error", (error) => {
@@ -1877,6 +1895,10 @@ async function startBridge() {
 
   mqttClient.on("message", async (topic, rawMessage) => {
     try {
+      const topicType = topic.endsWith("/telemetry") ? "telemetry"
+        : topic.endsWith("/events") ? "events"
+        : topic.endsWith("/status") ? "status" : "other";
+      metrics.telemetryMessages.inc({ type: topicType });
       const payload = parseMqttPayload(rawMessage);
       if (await pushDeviceCommandResultToDitto(topic, payload)) {
         return;

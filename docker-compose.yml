@@ -63,7 +63,10 @@ services:
       - BRIDGE_COMMAND_INTENT_POLL_INTERVAL_MS=${BRIDGE_COMMAND_INTENT_POLL_INTERVAL_MS:-500}
       - BRIDGE_COMMAND_INTENT_MAX_AGE_MS=${BRIDGE_COMMAND_INTENT_MAX_AGE_MS:-300000}
       - BRIDGE_COMMAND_ACK_TIMEOUT_MS=${BRIDGE_COMMAND_ACK_TIMEOUT_MS:-45000}
+      - METRICS_PORT=${BRIDGE_METRICS_PORT:-9464}
       - NODE_ENV=production
+    # Prometheus /metrics on 9464 is reachable in-network (default) — not
+    # published to the host. Only the observability profile scrapes it.
     restart: on-failure:5
     depends_on:
       mosquitto:
@@ -82,6 +85,12 @@ services:
     tmpfs:
       - /tmp
       - /app/node_modules/.cache
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"require('http').get('http://127.0.0.1:'+(process.env.METRICS_PORT||9464)+'/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - default
       - ditto_network
@@ -384,14 +393,54 @@ services:
     networks:
       - ditto_network
 
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: elevator_prometheus
+    profiles: ["observability"]
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=7d"
+      - "--storage.tsdb.retention.size=512MB"
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    extra_hosts:
+      # Lets Prometheus scrape the host-run dashboard at host.docker.internal.
+      - "host.docker.internal:host-gateway"
+    restart: on-failure:5
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 300M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - default
+      - ditto_network
+
   grafana:
-    image: grafana/grafana-oss:latest
+    image: grafana/grafana-oss:11.2.2
     container_name: elevator_grafana
     profiles: ["observability"]
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-change_me_local_only}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_ANALYTICS_REPORTING_ENABLED=false
     ports:
       - "${GRAFANA_PORT:-3001}:3000"
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
     restart: on-failure:5
     deploy:
       resources:
@@ -404,6 +453,7 @@ services:
     security_opt:
       - no-new-privileges:true
     networks:
+      - default
       - ditto_network
 
 volumes:
@@ -411,6 +461,7 @@ volumes:
   pg_data:
   ollama_data:
   grafana_data:
+  prometheus_data:
 
 networks:
   ditto_network:

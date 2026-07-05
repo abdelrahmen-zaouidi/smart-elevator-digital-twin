@@ -23,6 +23,7 @@ import net from "node:net";
 import { ping } from "../../../../src/server/db.js";
 import { deriveBridge, overallStatus } from "../../../../src/server/healthHelpers.js";
 import { log } from "../../../../src/server/log.js";
+import { recordHealth } from "../../../../src/server/metrics.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -126,6 +127,7 @@ export async function GET() {
 
   const checks = { ditto, bridge, mqtt, postgres, n8n };
   const payload = { status: overallStatus(checks), checks, ts: new Date().toISOString() };
+  recordHealth(payload);
 
   // Log only when degraded/down (fires at most once per cache TTL), naming the
   // failing dependencies — probe failures are otherwise only in the response.

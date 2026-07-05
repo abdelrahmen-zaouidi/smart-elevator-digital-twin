@@ -17,6 +17,7 @@ RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
 COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
 COPY --chown=nodejs:nodejs services/ditto-bridge/package.json ./package.json
 COPY --chown=nodejs:nodejs services/ditto-bridge/logger.js ./logger.js
+COPY --chown=nodejs:nodejs services/ditto-bridge/metrics.js ./metrics.js
 COPY --chown=nodejs:nodejs services/ditto-bridge/bridge.js ./bridge.js
 
 # Security: use non-root user

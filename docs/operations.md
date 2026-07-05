@@ -153,6 +153,27 @@ gate) → `command_intent_forwarded` → `command_mqtt_published` →
 bridge. `LOG_LEVEL` (default `info`) tunes verbosity. Example trace:
 `evidence/ops/command-log-correlation-2026-07-05.md`.
 
+## Observability (Prometheus + Grafana)
+
+`docker compose --profile observability up -d` starts Prometheus (7-day
+retention, ≤300 MB) and a provisioned Grafana. OFF by default; total
+footprint ≈ 104 MiB (see `evidence/ops/observability-2026-07-05.md`).
+
+- **Bridge** exposes `/metrics` (+ `/health`) on port 9464 (in-network only):
+  `bridge_ingest_messages_total{type}`, `bridge_ditto_merge_duration_seconds`
+  (the single-thing write bottleneck), `bridge_ditto_merge_total{result}`,
+  `bridge_command_lifecycle_total{event}`, `bridge_mqtt_reconnects_total`.
+- **Dashboard** exposes `/api/system/metrics` (exempt from the demo Basic-Auth
+  gate — read-only): `dashboard_gate_decisions_total{verdict,command}`,
+  `dashboard_gate_admission_seconds`, `dashboard_health_probe_status{dependency}`.
+- **Grafana** (`http://localhost:3001`, admin password from
+  `GRAFANA_ADMIN_PASSWORD`) auto-provisions the Prometheus datasource and the
+  **ElevatorOS — Platform Overview** dashboard.
+
+The dashboard runs on the host, so Prometheus scrapes it via
+`host.docker.internal:3000`; the bridge is scraped in-network at `bridge:9464`.
+Tear down with `docker compose --profile observability down`.
+
 ## Known limitations / roadmap ties
 
 - The ~1 GB SQL dump is dominated by per-row JSON payloads + bloat in

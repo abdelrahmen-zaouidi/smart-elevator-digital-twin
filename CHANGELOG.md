@@ -25,6 +25,13 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
     services (verified end-to-end,
     `evidence/ops/command-log-correlation-2026-07-05.md`). Bridge now builds
     from a real `package.json` + lockfile via `npm ci` (was a `printf` hack).
+  - Observability: Prometheus metrics from the bridge (`/metrics` on 9464 —
+    ingest rate, Ditto merge-latency histogram, command-lifecycle counters,
+    MQTT reconnects) and the dashboard (`/api/system/metrics` — gate verdicts,
+    gate-admission latency, health gauges). `docker compose --profile
+    observability up -d` starts Prometheus (7-day retention, ≤300 MB) +
+    Grafana with a provisioned ElevatorOS overview dashboard. Bridge gains a
+    `/health` port + compose healthcheck.
 
 ## [1.0.0] - 2026-07-04
 

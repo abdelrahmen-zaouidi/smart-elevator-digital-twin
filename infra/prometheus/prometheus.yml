@@ -1,0 +1,28 @@
+# Prometheus scrape config for the observability profile
+# (docker compose --profile observability up -d). Tight defaults for the
+# ~7.8 GB host: 7-day retention is set on the CLI, not here.
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+
+scrape_configs:
+  # The bridge exposes /metrics on 9464, reachable in-network on `default`.
+  - job_name: bridge
+    static_configs:
+      - targets: ["bridge:9464"]
+
+  # The dashboard runs on the HOST (npm run dev / next start), so Prometheus
+  # reaches it via the Docker host gateway. If the dashboard demo Basic-Auth
+  # gate is enabled (DASHBOARD_BASIC_AUTH_PASS set), uncomment basic_auth and
+  # set it to the same operator credentials; with the gate unset (local dev)
+  # the endpoint is open and no auth is needed.
+  - job_name: dashboard
+    metrics_path: /api/system/metrics
+    static_configs:
+      - targets: ["host.docker.internal:3000"]
+    # basic_auth:
+    #   username: operator
+    #   password: <DASHBOARD_BASIC_AUTH_PASS>
+
+  # Mosquitto's $SYS tree is not scraped here (needs an MQTT exporter); the
+  # bridge's ingest counters already reflect broker throughput.
