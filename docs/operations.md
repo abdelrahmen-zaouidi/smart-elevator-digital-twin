@@ -79,6 +79,55 @@ Notes:
 3. Re-run the drill verification queries (row counts) before trusting the rig.
 4. Restart everything: Ditto stack, then `docker compose restart`.
 
+## Migration 009 — hypertable cutover (zero-gap runbook)
+
+Migration `009_hypertable_conversion.sql` converts `telemetry_raw` into a
+TimescaleDB hypertable and rebuilds `hourly_risk` / `hourly_energy` as
+continuous aggregates. It is **fully rehearsed** on a full-size restore
+(see `evidence/ops/timescale-migration-2026-07-05.md`) but is a
+**coordinated cutover** because it changes the primary key from `event_id`
+to `(event_id, time)`, which breaks the n8n ingestion upsert
+`ON CONFLICT (event_id)` until the workflow is re-imported.
+
+Run these steps together so telemetry ingestion never errors (zero gap):
+
+1. **Pause ingestion** — in the n8n UI, deactivate
+   `01_ingestion_surveillance_agent` (or `docker exec elevator_agents n8n
+   update:workflow --id=<id> --active=false`).
+2. **Back up** — `powershell -File scripts\backup.ps1`.
+3. **Apply the migration** (not in a txn block — `create_hypertable` forbids it):
+   ```bash
+   docker cp infra/postgres/migrations/009_hypertable_conversion.sql elevator_db:/tmp/009.sql
+   MSYS_NO_PATHCONV=1 docker exec elevator_db psql -U admin -d smart_building -v ON_ERROR_STOP=1 -f /tmp/009.sql
+   ```
+4. **Re-import the corrected ingestion workflow** so the running n8n uses
+   `ON CONFLICT (event_id, time)`. The in-repo JSON
+   (`workflows/n8n/01_ingestion_surveillance_agent.json`) is already fixed;
+   import it via the n8n UI (Workflows → Import from File), or patch-and-import
+   the live export in place:
+   ```bash
+   docker exec elevator_agents n8n export:workflow --id=<id> --output=/tmp/wf.json
+   # replace ON CONFLICT (event_id) -> ON CONFLICT (event_id, time) in /tmp/wf.json
+   docker exec elevator_agents n8n import:workflow --input=/tmp/wf.json
+   ```
+5. **Reactivate** the workflow and `docker compose restart n8n`.
+6. **Verify** ingestion resumed and is deduping correctly:
+   ```bash
+   docker exec elevator_db psql -U admin -d smart_building -c \
+     "SELECT count(*), max(time) FROM telemetry_raw;"   # count should grow
+   docker exec elevator_db psql -U admin -d smart_building -c \
+     "SELECT hypertable_name FROM timescaledb_information.hypertables;"
+   ```
+
+Rollback: restore the pre-migration `postgres_smart_building.sql` from the
+step-2 backup (`scripts\restore.ps1 ... -Target pg -Database smart_building`).
+
+Dedup note: the new conflict target `(event_id, time)` preserves dedup because
+`event.timestamp` is deterministic per event. The only divergence is if an
+event is ever ingested WITHOUT a timestamp (the code falls back to
+`new Date()`), in which case a re-ingest could insert a duplicate — telemetry
+always carries a timestamp, so the window is effectively nil.
+
 ## Known limitations / roadmap ties
 
 - The ~1 GB SQL dump is dominated by per-row JSON payloads + bloat in

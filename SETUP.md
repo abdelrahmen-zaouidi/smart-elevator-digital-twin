@@ -255,7 +255,17 @@ docker exec -i elevator_db psql -U admin -d smart_building \
   < infra/postgres/migrations/005_command_safety_gate.sql
 docker exec -i elevator_db psql -U admin -d smart_building \
   < infra/postgres/migrations/006_dispatch_policy_engine.sql
+docker exec -i elevator_db psql -U admin -d smart_building \
+  < infra/postgres/migrations/007_access_control_log.sql
+docker exec -i elevator_db psql -U admin -d smart_building \
+  < infra/postgres/migrations/008_telemetry_retention.sql
 ```
+
+`009_hypertable_conversion.sql` is a **coordinated cutover, not a plain
+migration** — it changes `telemetry_raw`'s primary key and must be applied
+together with an n8n ingestion-workflow re-import. Do NOT pipe it in blindly;
+follow the runbook in
+[docs/operations.md](docs/operations.md#migration-009--hypertable-cutover-zero-gap-runbook).
 
 The migrations are fully idempotent (`IF NOT EXISTS` / `CREATE OR REPLACE`
 where appropriate). `004_notification_outbox_contract.sql` repairs older

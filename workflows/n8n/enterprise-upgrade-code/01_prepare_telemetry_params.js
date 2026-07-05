@@ -27,11 +27,15 @@ INSERT INTO telemetry_raw (
   $15::real, $16::real, $17::real, $18::smallint, $19::jsonb,
   $20, $21, $22, $23,
   $24, $25::boolean, $26, $27, $28::jsonb
-) ON CONFLICT (event_id) DO UPDATE SET
+) ON CONFLICT (event_id, time) DO UPDATE SET
   processing_status = EXCLUDED.processing_status,
   duplicate = EXCLUDED.duplicate,
   metadata = telemetry_raw.metadata || EXCLUDED.metadata;
 `;
+// Conflict target is (event_id, time) since migration 009 made telemetry_raw a
+// TimescaleDB hypertable — a hypertable's PK/unique index must include the
+// partition column (time). event.timestamp is deterministic per event, so the
+// same event re-ingested yields the same (event_id, time) and still dedups.
 
 event._db_params = [
   event.timestamp || new Date().toISOString(),

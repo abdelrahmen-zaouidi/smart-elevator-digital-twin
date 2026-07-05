@@ -33,10 +33,19 @@ Key columns: `time`, `thing_id`, `event_id` (PK), `event_type`, `risk_score`,
 `motor_temp_c`, `vibration_g`, `power_kw`, `door_state`, `forced_entry`,
 `severity`, `correlation_id`, `duplicate_hash`, `processing_status`
 
-**Note:** `telemetry_raw` is a regular PostgreSQL table (not a TimescaleDB hypertable).
-The `event_id` primary key predates Phase 4. Converting to a hypertable would require
-changing the primary key to include `time`, which would break the n8n `ON CONFLICT (event_id)`
-upsert. The Phase 4 analytics views use `time_bucket()` directly on the plain table.
+**Note:** `telemetry_raw` was historically a regular PostgreSQL table (not a
+hypertable) — the `event_id`-only primary key blocked conversion. **Migration
+`009_hypertable_conversion.sql`** resolves this: it swaps the PK to
+`(event_id, time)`, converts `telemetry_raw` to a TimescaleDB hypertable
+(`migrate_data`), rebuilds `hourly_risk` / `hourly_energy` as **continuous
+aggregates** with identical output columns, and adds compression (7-day) +
+retention (90-day) policies. The conversion is **rehearsed on a full-size
+restore** (`evidence/ops/timescale-migration-2026-07-05.md`); because the PK
+change breaks the n8n `ON CONFLICT (event_id)` upsert (now `(event_id, time)`,
+fixed in-repo), it is applied as a **coordinated cutover** — see the runbook in
+[operations.md](operations.md#migration-009--hypertable-cutover-zero-gap-runbook).
+Until that cutover is run on a given deployment, the analytics views use
+`time_bucket()` directly on the plain table.
 
 ### `hourly_risk` (view, created by migration 003)
 Hourly aggregation of risk scores. Columns: `bucket`, `thing_id`, `avg_risk`,

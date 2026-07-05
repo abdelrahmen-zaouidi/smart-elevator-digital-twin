@@ -11,6 +11,14 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   - Dashboard test harness: Vitest unit + hermetic `/api/commands` route
     tests (33 assertions incl. the reject-zero-Ditto-write invariant), wired
     into `npm run validate` + CI; opt-in Playwright smoke against a live stack.
+  - TimescaleDB: migration `009_hypertable_conversion.sql` converts
+    `telemetry_raw` to a hypertable (PK → `(event_id, time)`) and rebuilds
+    `hourly_risk` / `hourly_energy` as continuous aggregates with unchanged
+    output columns, plus compression + retention policies. Rehearsed on a
+    full-size restore (`evidence/ops/timescale-migration-2026-07-05.md`);
+    applied as a coordinated cutover with an n8n ingestion re-import (runbook
+    in `docs/operations.md`). Ingestion upsert fixed to
+    `ON CONFLICT (event_id, time)`.
 
 ## [1.0.0] - 2026-07-04
 

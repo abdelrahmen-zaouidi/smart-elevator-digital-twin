@@ -76,11 +76,14 @@ Answers should be direct and technically precise; the author is the sole maintai
 - **MQTT TLS cert vs broker IP:** when the broker IP changes, re-issue the **server leaf only** via
   `scripts/reissue-server-cert.sh` (keeps CA → no firmware reflash). Never rerun cert gen with
   `FORCE=1` — that regenerates the CA and forces a reflash of every device.
-- **TimescaleDB reality:** `telemetry_raw` is a **plain table** (not a hypertable) and `hourly_*` are
-  **plain views** (not continuous aggregates) — init `001` never took on the pre-existing volume, and the
-  `event_id`-only PK + `ON CONFLICT (event_id)` upsert blocks hypertable conversion. Migration
-  `008` is conditional and provides `prune_telemetry_raw(days)`. Don't describe or code against
-  hypertable features that aren't there.
+- **TimescaleDB reality:** `telemetry_raw` was a **plain table** (not a hypertable) and `hourly_*`
+  **plain views** — the `event_id`-only PK + `ON CONFLICT (event_id)` upsert blocked conversion.
+  Migration **`009_hypertable_conversion.sql`** fixes this (PK→`(event_id,time)`, `create_hypertable`,
+  `hourly_*`→continuous aggregates with identical columns, compression+retention); it is **rehearsed on
+  a full-size restore but applied as a coordinated cutover** (the PK change breaks the n8n upsert until
+  the ingestion workflow is re-imported — runbook in `docs/operations.md`). Repo upsert files already use
+  `ON CONFLICT (event_id, time)`. Until a deployment runs the cutover, treat it as a plain table; migration
+  `008` (conditional) still provides `prune_telemetry_raw(days)`.
 - **Stale bridge image:** the bridge runs from a built image — after changing `services/ditto-bridge/`
   or `packages/shared/`, `docker compose build bridge && docker compose up -d bridge`, or you'll
   debug old code.
