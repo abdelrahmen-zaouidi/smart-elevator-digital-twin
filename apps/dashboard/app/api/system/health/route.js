@@ -22,6 +22,7 @@ import { NextResponse } from "next/server";
 import net from "node:net";
 import { ping } from "../../../../src/server/db.js";
 import { deriveBridge, overallStatus } from "../../../../src/server/healthHelpers.js";
+import { log } from "../../../../src/server/log.js";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -125,6 +126,15 @@ export async function GET() {
 
   const checks = { ditto, bridge, mqtt, postgres, n8n };
   const payload = { status: overallStatus(checks), checks, ts: new Date().toISOString() };
+
+  // Log only when degraded/down (fires at most once per cache TTL), naming the
+  // failing dependencies — probe failures are otherwise only in the response.
+  if (payload.status !== "ok") {
+    const failing = Object.entries(checks)
+      .filter(([, c]) => c.status !== "ok")
+      .map(([name, c]) => `${name}:${c.status}`);
+    log.warn("platform health degraded", { event: "health_degraded", status: payload.status, failing });
+  }
 
   g._systemHealthCache = { at: Date.now(), payload };
   return NextResponse.json(payload);

@@ -27,6 +27,7 @@ import {
   normalizeCommandStatus,
 } from "@smart-elevator/shared/commandLifecycle.js";
 import { query } from "../../../src/server/db.js";
+import { log } from "../../../src/server/log.js";
 
 export const dynamic = "force-dynamic";
 
@@ -264,7 +265,7 @@ async function persistAuditEvent(decision, eventType, errorMessage = null) {
     );
     return "OK";
   } catch (error) {
-    console.warn("[safety-gate] audit_log insert failed:", error.message);
+    log.warn("audit_log insert failed", { event: "audit_insert_failed", detail: error.message });
     return "FAILED";
   }
 }
@@ -527,6 +528,21 @@ export async function POST(request) {
 
   // 2. Run the deterministic safety gate.
   const decision = validateCommand(trustedCommand, twin, { ditto_reachable });
+
+  // Structured gate-verdict log, keyed by command_id (same id the bridge logs
+  // downstream) and attributed to the resolved operator identity.
+  log.info("safety gate decision", {
+    event: decision.accepted ? "command_accepted" : "command_rejected",
+    command_id: decision.command_id,
+    correlation_id: decision.correlation_id,
+    thing_id: thingId,
+    command: decision.command,
+    accepted: decision.accepted,
+    risk_score: decision.risk_score ?? null,
+    requested_by: principal.subject,
+    role: principal.role,
+    reason: decision.accepted ? undefined : decision.rejection_reasons,
+  });
 
   // 3. Persist & audit BEFORE any Ditto write — the decision must always
   //    leave a trace, regardless of write success/failure.

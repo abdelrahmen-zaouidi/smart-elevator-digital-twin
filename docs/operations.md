@@ -128,6 +128,31 @@ event is ever ingested WITHOUT a timestamp (the code falls back to
 `new Date()`), in which case a re-ingest could insert a duplicate — telemetry
 always carries a timestamp, so the window is effectively nil.
 
+## Structured logs (command correlation)
+
+The bridge (`services/ditto-bridge/logger.js`) and the dashboard API routes
+(`apps/dashboard/src/server/log.js`) emit **JSON lines** (pino) with a shared
+field convention:
+
+```
+{ ts, level, svc, event?, thing_id?, command_id?, correlation_id?, msg, ... }
+```
+
+Every command-lifecycle line carries the same `command_id`, so one query
+reconstructs a command end to end across both services:
+
+```bash
+# dashboard dev server stdout + bridge container:
+grep '"command_id":"CMD-..."' <dashboard-log>
+docker logs elevator_bridge | grep '"command_id":"CMD-..."'
+```
+
+Lifecycle `event` values: `command_accepted` / `command_rejected` (dashboard
+gate) → `command_intent_forwarded` → `command_mqtt_published` →
+`command_ack_received` (or `command_ack_timeout` / `command_dropped`) on the
+bridge. `LOG_LEVEL` (default `info`) tunes verbosity. Example trace:
+`evidence/ops/command-log-correlation-2026-07-05.md`.
+
 ## Known limitations / roadmap ties
 
 - The ~1 GB SQL dump is dominated by per-row JSON payloads + bloat in

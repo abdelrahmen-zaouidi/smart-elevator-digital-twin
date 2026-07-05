@@ -11,6 +11,11 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: true,
+    // Route tests import pino (via src/server/log.js). pino's stream can
+    // destabilize tinypool's thread workers ("Worker exited unexpectedly");
+    // run tests in a single forked process instead — deterministic + fast.
+    pool: "forks",
+    poolOptions: { forks: { singleFork: true } },
     include: [
       "src/**/*.test.{js,mjs}",
       "app/**/*.test.{js,mjs}",

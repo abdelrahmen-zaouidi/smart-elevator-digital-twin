@@ -19,6 +19,12 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
     applied as a coordinated cutover with an n8n ingestion re-import (runbook
     in `docs/operations.md`). Ingestion upsert fixed to
     `ON CONFLICT (event_id, time)`.
+  - Structured logging: bridge + dashboard API routes emit JSON logs (pino)
+    with a shared `{ts, level, svc, event, thing_id, command_id, msg}`
+    convention — one `grep` by `command_id` reconstructs a command across both
+    services (verified end-to-end,
+    `evidence/ops/command-log-correlation-2026-07-05.md`). Bridge now builds
+    from a real `package.json` + lockfile via `npm ci` (was a `printf` hack).
 
 ## [1.0.0] - 2026-07-04
 

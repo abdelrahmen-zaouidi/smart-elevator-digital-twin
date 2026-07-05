@@ -2,6 +2,7 @@ const mqtt = require("mqtt");
 const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
+const log = require("./logger");
 
 function loadEnvFile(filePath, { override = false } = {}) {
   if (!fs.existsSync(filePath)) return;
@@ -836,7 +837,7 @@ async function mergeThingWithRetry(path, patch, retries = 3) {
         return "written";
       }
       lastError = error;
-      console.error(`[Bridge] Ditto MERGE failed (${attempt}/${retries})`, path, error.message);
+      log.error(`[Bridge] Ditto MERGE failed (${attempt}/${retries})`, path, error.message);
       if (attempt < retries) {
         await sleep(DITTO_RETRY_DELAY_MS * attempt);
       }
@@ -855,7 +856,7 @@ async function pushToDitto(telemetry) {
   const normalized = normalizeTelemetry(telemetry);
 
   if (!normalized) {
-    console.warn("[Bridge] Ignoring telemetry payload with no twin-mappable fields", {
+    log.warn("[Bridge] Ignoring telemetry payload with no twin-mappable fields", {
       topic: telemetry.__mqtt_topic,
       path: telemetry.path,
       keys: Object.keys(telemetry || {}).slice(0, 12),
@@ -871,7 +872,7 @@ async function pushToDitto(telemetry) {
   if (hasKeys(normalized.attributes)) patch.attributes = normalized.attributes;
 
   if (!hasKeys(patch)) {
-    console.warn("[Bridge] Telemetry normalized but produced no Ditto writes", {
+    log.warn("[Bridge] Telemetry normalized but produced no Ditto writes", {
       topic: telemetry.__mqtt_topic,
       path: telemetry.path,
       featureCount: Object.keys(normalized.features || {}).length,
@@ -891,7 +892,7 @@ async function pushToDitto(telemetry) {
   const result = await mergeThingWithRetry(`/api/2/things/${encodedThingId}`, patch);
   if (result === "skipped") return;
 
-  console.info(`[Bridge] Ditto twin merged for ${thingId} (${Object.keys(patch).join("+")})`);
+  log.info(`[Bridge] Ditto twin merged for ${thingId} (${Object.keys(patch).join("+")})`);
 }
 
 // ---------------------------------------------------------------------------
@@ -926,7 +927,7 @@ async function appendAccessLogRing(thingId, entry) {
     if (isObject(res.data)) props = res.data;
   } catch (error) {
     if (!isDittoNotFound(error)) {
-      console.warn("[Bridge] accessControl read failed:", error.message);
+      log.warn("[Bridge] accessControl read failed:", error.message);
     }
   }
 
@@ -949,7 +950,7 @@ async function appendAccessLogRing(thingId, entry) {
         properties: { recentAccessLog: next, log_seq: nextSeq, authorizedTags: {} },
       });
     } else {
-      console.warn("[Bridge] accessControl ring write failed:", error.message);
+      log.warn("[Bridge] accessControl ring write failed:", error.message);
     }
   }
 }
@@ -959,7 +960,7 @@ async function postAccessLogDurable(thingId, entry) {
   try {
     await axios.post(ACCESS_LOG_POST_URL, { ...entry, thing_id: thingId }, { timeout: 4000 });
   } catch (error) {
-    console.warn("[Bridge] durable access-log POST failed:", error.message);
+    log.warn("[Bridge] durable access-log POST failed:", error.message);
   }
 }
 
@@ -1011,7 +1012,7 @@ async function emitAccessEventsFromSecurity(thingId, security) {
       await appendAccessLogRing(thingId, entry);
       await postAccessLogDurable(thingId, entry);
     } catch (error) {
-      console.warn("[Bridge] access event emission failed:", error.message);
+      log.warn("[Bridge] access event emission failed:", error.message);
     }
   }
 }
@@ -1034,7 +1035,7 @@ async function pushMicrocontrollerStatusToDitto(topic, payload) {
   } else {
     clearMicrocontrollerOfflineTimer(normalizedStatus.thingId);
   }
-  console.info("[Bridge] ESP32-S3 status synchronized", {
+  log.info("[Bridge] ESP32-S3 status synchronized", {
     thingId: normalizedStatus.thingId,
     status: normalizedStatus.properties.status,
     mqttId: normalizedStatus.properties.mqtt_id,
@@ -1109,13 +1110,13 @@ async function markMicrocontrollerOfflineIfStale(thingId, mqttId) {
       buildStatusTopic(thingId),
     );
     lastMicrocontrollerStatusByThingId.set(thingId, "OFFLINE");
-    console.warn("[Bridge] ESP32-S3 marked OFFLINE by telemetry/status watchdog", {
+    log.warn("[Bridge] ESP32-S3 marked OFFLINE by telemetry/status watchdog", {
       thingId,
       mqttId: safeMqttId,
       staleForMs: ageMs,
     });
   } catch (error) {
-    console.error("[Bridge] Failed to mark ESP32-S3 offline by watchdog", {
+    log.error("[Bridge] Failed to mark ESP32-S3 offline by watchdog", {
       thingId,
       error: error.message,
     });
@@ -1141,7 +1142,7 @@ async function pushMicrocontrollerTelemetryHeartbeatToDitto(topic, payload) {
 
   lastMicrocontrollerHeartbeatByThingId.set(heartbeat.thingId, nowMs);
   lastMicrocontrollerStatusByThingId.set(heartbeat.thingId, "ONLINE");
-  console.info("[Bridge] ESP32-S3 telemetry heartbeat synchronized", {
+  log.info("[Bridge] ESP32-S3 telemetry heartbeat synchronized", {
     thingId: heartbeat.thingId,
     mqttId: heartbeat.properties.mqtt_id,
   });
@@ -1167,7 +1168,7 @@ async function drainLatestTelemetry() {
       try {
         await pushToDitto(telemetry);
       } catch (error) {
-        console.error("[Bridge] Failed to process telemetry", error);
+        log.error("[Bridge] Failed to process telemetry", error);
       }
 
       if (latestTelemetry) {
@@ -1221,8 +1222,11 @@ function rememberForwardedCommandId(commandId) {
 }
 
 function publishMqttCommand(thingId, command, onPublished, onError) {
+  const commandId = command && command.command_id ? String(command.command_id) : null;
   if (!mqttClient || !mqttClient.connected) {
-    console.warn("[Bridge] MQTT not connected, dropping command", command);
+    log.warn("MQTT not connected, dropping command", {
+      event: "command_dropped", thing_id: thingId, command_id: commandId, command,
+    });
     if (typeof onError === "function") onError(new Error("MQTT not connected"));
     return false;
   }
@@ -1230,10 +1234,14 @@ function publishMqttCommand(thingId, command, onPublished, onError) {
   const payload = JSON.stringify(command);
   mqttClient.publish(topic, payload, { qos: MQTT_COMMAND_QOS }, (err) => {
     if (err) {
-      console.warn("[Bridge] MQTT publish failed", topic, err.message);
+      log.warn("MQTT publish failed", {
+        event: "command_publish_failed", thing_id: thingId, command_id: commandId, topic, detail: err.message,
+      });
       if (typeof onError === "function") onError(err);
     } else {
-      console.info(`[Bridge] -> device ${topic}: ${payload}`);
+      log.info("command published to device", {
+        event: "command_mqtt_published", thing_id: thingId, command_id: commandId, topic,
+      });
       if (typeof onPublished === "function") onPublished();
     }
   });
@@ -1255,7 +1263,7 @@ async function readPendingCommandIntent(thingId) {
     return isObject(response.data) ? response.data : null;
   } catch (error) {
     if (!isDittoNotFound(error)) {
-      console.warn("[Bridge] Failed to read pending command:", error.message);
+      log.warn("[Bridge] Failed to read pending command:", error.message);
     }
     return null;
   }
@@ -1293,12 +1301,13 @@ async function markCommandTimedOut(thingId, commandId) {
         result,
       ),
     ]);
-    console.warn("[Bridge] Command acknowledgement timed out", {
+    log.warn("command acknowledgement timed out", {
+      event: "command_ack_timeout",
       thing_id: thingId,
       command_id: commandId,
     });
   } catch (error) {
-    console.warn("[Bridge] Failed to persist command timeout:", error.message);
+    log.warn("[Bridge] Failed to persist command timeout:", error.message);
   }
 }
 
@@ -1509,7 +1518,7 @@ async function markCommandIntentForwarded(thingId, intent, command) {
     ]);
     scheduleCommandAckTimeout(thingId, updatedIntent);
   } catch (error) {
-    console.warn("[Bridge] Failed to mark command intent as forwarded:", error.message);
+    log.warn("[Bridge] Failed to mark command intent as forwarded:", error.message);
   }
 }
 
@@ -1538,7 +1547,7 @@ async function markUntrustedCommandIntent(thingId, intent) {
       ),
     ]);
   } catch (error) {
-    console.warn("[Bridge] Failed to persist untrusted command rejection:", error.message);
+    log.warn("[Bridge] Failed to persist untrusted command rejection:", error.message);
   }
 }
 
@@ -1566,7 +1575,7 @@ function publishCommandIntent(thingId, intent, source) {
 
   if (forwardedCommandIdSet.has(commandId) || forwardingCommandIdSet.has(commandId)) return false;
   if (!isFreshCommandIntent(intent)) {
-    console.warn("[Bridge] Skipping stale command intent", {
+    log.warn("[Bridge] Skipping stale command intent", {
       command_id: commandId,
       command: intent.command,
       queued_at: intent.queued_at,
@@ -1575,7 +1584,7 @@ function publishCommandIntent(thingId, intent, source) {
     return false;
   }
   if (!isTrustedCommandIntent(intent)) {
-    console.warn("[Bridge] Rejecting unverified Ditto command intent", {
+    log.warn("[Bridge] Rejecting unverified Ditto command intent", {
       command_id: commandId,
       source,
       issuer: intent?.authorization_context?.issuer || null,
@@ -1601,7 +1610,8 @@ function publishCommandIntent(thingId, intent, source) {
     return false;
   }
 
-  console.info("[Bridge] Ditto command intent forwarded", {
+  log.info("Ditto command intent forwarded", {
+    event: "command_intent_forwarded",
     source,
     command_id: commandId,
     command: command.command,
@@ -1618,7 +1628,7 @@ async function pushDeviceCommandResultToDitto(topic, payload) {
 
   const commandId = String(payload.command_id || "");
   if (!commandId) {
-    console.warn("[Bridge] Ignoring command result without command_id", { topic });
+    log.warn("[Bridge] Ignoring command result without command_id", { topic });
     return true;
   }
 
@@ -1649,7 +1659,7 @@ async function pushDeviceCommandResultToDitto(topic, payload) {
         active_command_id: pending?.command_id || null,
       },
     );
-    console.warn("[Bridge] Ignored stale/mismatched device acknowledgement", {
+    log.warn("[Bridge] Ignored stale/mismatched device acknowledgement", {
       command_id: commandId,
       active_command_id: pending?.command_id || null,
     });
@@ -1682,7 +1692,8 @@ async function pushDeviceCommandResultToDitto(topic, payload) {
     ),
   ]);
 
-  console.info("[Bridge] Device command result persisted", {
+  log.info("device command result persisted", {
+    event: "command_ack_received",
     command_id: commandId,
     status,
   });
@@ -1742,7 +1753,7 @@ async function reconcilePendingCommandIntent(thingId, source = "poll") {
     publishCommandIntent(thingId, response.data, source);
   } catch (error) {
     if (!isDittoNotFound(error)) {
-      console.warn("[Bridge] Command intent poll failed:", error.message);
+      log.warn("[Bridge] Command intent poll failed:", error.message);
     }
   } finally {
     commandIntentPollInFlight = false;
@@ -1757,7 +1768,7 @@ function startCommandIntentPoller(thingId) {
     void reconcilePendingCommandIntent(thingId, "poll");
   }, COMMAND_INTENT_POLL_INTERVAL_MS);
 
-  console.info("[Bridge] Ditto command intent poller enabled", {
+  log.info("[Bridge] Ditto command intent poller enabled", {
     thingId,
     intervalMs: COMMAND_INTENT_POLL_INTERVAL_MS,
     maxAgeMs: COMMAND_INTENT_MAX_AGE_MS,
@@ -1766,7 +1777,7 @@ function startCommandIntentPoller(thingId) {
 
 async function startDittoCommandForwarder(thingId) {
   if (!COMMAND_FORWARDING_ENABLED) {
-    console.info("[Bridge] Ditto->MQTT command forwarding disabled (BRIDGE_COMMAND_FORWARDING=false)");
+    log.info("[Bridge] Ditto->MQTT command forwarding disabled (BRIDGE_COMMAND_FORWARDING=false)");
     return;
   }
   const url = `/api/2/things/${encodeURIComponent(thingId)}`;
@@ -1776,7 +1787,7 @@ async function startDittoCommandForwarder(thingId) {
       responseType: "stream",
       timeout: 0,             // long-lived; no per-request timeout
     });
-    console.info("[Bridge] Subscribed to Ditto SSE for", thingId);
+    log.info("[Bridge] Subscribed to Ditto SSE for", thingId);
 
     let buffer = "";
     response.data.setEncoding("utf8");
@@ -1795,27 +1806,27 @@ async function startDittoCommandForwarder(thingId) {
             const event = JSON.parse(data);
             handleDittoEvent(thingId, event);
           } catch (err) {
-            console.warn("[Bridge] SSE parse error:", err.message);
+            log.warn("[Bridge] SSE parse error:", err.message);
           }
         }
       }
     });
     response.data.on("end", () => {
-      console.warn("[Bridge] Ditto SSE ended, reconnecting in 5s");
+      log.warn("[Bridge] Ditto SSE ended, reconnecting in 5s");
       setTimeout(() => startDittoCommandForwarder(thingId), 5000);
     });
     response.data.on("error", (err) => {
-      console.warn("[Bridge] Ditto SSE stream error:", err.message);
+      log.warn("[Bridge] Ditto SSE stream error:", err.message);
       // 'end' fires too; reconnect happens there
     });
   } catch (err) {
-    console.warn(`[Bridge] Ditto SSE connect failed (${err.message}), retry in 5s`);
+    log.warn(`[Bridge] Ditto SSE connect failed (${err.message}), retry in 5s`);
     setTimeout(() => startDittoCommandForwarder(thingId), 5000);
   }
 }
 
 async function startBridge() {
-  console.info("[Bridge] Runtime configuration", {
+  log.info("[Bridge] Runtime configuration", {
     mqtt: MQTT_URL,
     topics: MQTT_TOPICS,
     canonicalTopics: {
@@ -1845,23 +1856,23 @@ async function startBridge() {
   });
 
   mqttClient.on("connect", () => {
-    console.info("[Bridge] Connected to MQTT", MQTT_URL);
+    log.info("[Bridge] Connected to MQTT", MQTT_URL);
     mqttClient.subscribe(MQTT_TOPICS, (error) => {
       if (error) {
-        console.error("[Bridge] MQTT subscription error", error);
+        log.error("[Bridge] MQTT subscription error", error);
         return;
       }
 
-      console.info("[Bridge] Subscribed to", MQTT_TOPICS.join(", "));
+      log.info("[Bridge] Subscribed to", MQTT_TOPICS.join(", "));
     });
   });
 
   mqttClient.on("reconnect", () => {
-    console.warn("[Bridge] reconnecting to MQTT...");
+    log.warn("[Bridge] reconnecting to MQTT...");
   });
 
   mqttClient.on("error", (error) => {
-    console.error("[Bridge] MQTT error", error);
+    log.error("[Bridge] MQTT error", error);
   });
 
   mqttClient.on("message", async (topic, rawMessage) => {
@@ -1875,7 +1886,7 @@ async function startBridge() {
       }
 
       if (!isObject(payload)) {
-        console.warn("[Bridge] Ignoring non-JSON MQTT payload outside status topic", { topic });
+        log.warn("[Bridge] Ignoring non-JSON MQTT payload outside status topic", { topic });
         return;
       }
 
@@ -1885,7 +1896,7 @@ async function startBridge() {
       telemetry.__mqtt_topic = topic;
       enqueueTelemetry(telemetry);
     } catch (error) {
-      console.error("[Bridge] Failed to process MQTT message", {
+      log.error("[Bridge] Failed to process MQTT message", {
         topic,
         error: error.message,
       });
@@ -1899,6 +1910,6 @@ async function startBridge() {
 }
 
 startBridge().catch((error) => {
-  console.error("[Bridge] Fatal startup error", error);
+  log.error("[Bridge] Fatal startup error", error);
   process.exit(1);
 });
