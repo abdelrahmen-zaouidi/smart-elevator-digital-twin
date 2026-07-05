@@ -1,0 +1,48 @@
+﻿-- Live command campaign (GAPS M10) DB cross-verification
+-- Window: 2026-07-05T00:08:04.417Z .. 2026-07-05T00:11:52.867Z (UTC)
+-- Source: control_command_log on elevator_db (smart_building)
+-- Generated: 2026-07-05T01:13:06.2031178+01:00
+ decision | ditto_write_status | count 
+----------+--------------------+-------
+ ACCEPTED | SUCCEEDED          |    28
+ REJECTED | SKIPPED            |    29
+(2 rows)
+
+ invariant_violations 
+----------------------
+                    0
+(1 row)
+
+        command         | decision | count 
+------------------------+----------+-------
+ ACKNOWLEDGE_ALERT      | ACCEPTED |     1
+ CLEAR_QUEUE            | ACCEPTED |     1
+ CLOSE_DOOR             | ACCEPTED |     1
+ DEVICE_DIAGNOSTIC      | ACCEPTED |     1
+ DEVICE_DIAGNOSTIC      | REJECTED |     2
+ EMERGENCY_STOP         | ACCEPTED |     1
+ EMERGENCY_STOP         | REJECTED |     1
+ LOCKDOWN               | ACCEPTED |     1
+ LOCKDOWN               | REJECTED |     1
+ MOVE_TO_FLOOR          | ACCEPTED |     4
+ MOVE_TO_FLOOR          | REJECTED |     9
+ OPEN_DOOR              | ACCEPTED |     2
+ OPEN_SHAFT_DOORS       | REJECTED |     1
+ RELEASE_LOCKDOWN       | ACCEPTED |     1
+ RELEASE_LOCKDOWN       | REJECTED |     2
+ REQUEST_STATUS_REFRESH | ACCEPTED |     2
+ RESET_ACTIVE_PROBLEMS  | ACCEPTED |     2
+ RESET_EMERGENCY        | ACCEPTED |     1
+ RESET_EMERGENCY        | REJECTED |     2
+ RESUME_NORMAL_MODE     | ACCEPTED |     1
+ RESUME_NORMAL_MODE     | REJECTED |     1
+ SELF_TEST_DANCE        | REJECTED |     1
+ SET_DISPATCH_POLICY    | ACCEPTED |     5
+ SET_DISPATCH_POLICY    | REJECTED |     6
+ SET_FAN                | ACCEPTED |     3
+ SET_FAN                | REJECTED |     2
+ SET_MAINTENANCE_MODE   | ACCEPTED |     1
+ SET_MAINTENANCE_MODE   | REJECTED |     1
+(28 rows)
+
+

@@ -198,7 +198,9 @@ async function persistDecision(decision, thingId, dittoWriteStatus, auditStatus)
     decision.risk_score ?? 0,
     decision.system_mode,
     snap.current_floor,
-    decision.target_floor,
+    // target_floor column is integer; a malformed (e.g. fractional) request
+    // must still persist its rejection trace — raw_command keeps the original.
+    Number.isInteger(decision.target_floor) ? decision.target_floor : null,
     snap.door_state,
     snap.emergency_stop,
     typeof snap.load_kg === "number" ? snap.load_kg : null,

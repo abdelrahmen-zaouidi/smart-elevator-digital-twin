@@ -1,0 +1,278 @@
+{
+  "campaign": "GAPS M10 live command campaign",
+  "api": "http://localhost:3000/api/commands",
+  "started_at": "2026-07-04T23:58:13.862Z",
+  "finished_at": "2026-07-05T00:01:46.285Z",
+  "total_commands": 57,
+  "accepted": 24,
+  "rejected": 32,
+  "transport_errors": 1,
+  "expected_decision_mismatches": [
+    {
+      "seq": 2,
+      "command": "MOVE_TO_FLOOR",
+      "expected": "ACCEPTED",
+      "got": "REJECTED",
+      "reasons": [
+        "REJECTED: door is open"
+      ]
+    },
+    {
+      "seq": 7,
+      "command": "MOVE_TO_FLOOR",
+      "expected": "REJECTED",
+      "got": "TRANSPORT_ERROR"
+    },
+    {
+      "seq": 26,
+      "command": "MOVE_TO_FLOOR",
+      "expected": "ACCEPTED",
+      "got": "REJECTED",
+      "reasons": [
+        "REJECTED: door is open"
+      ]
+    },
+    {
+      "seq": 37,
+      "command": "MOVE_TO_FLOOR",
+      "expected": "ACCEPTED",
+      "got": "REJECTED",
+      "reasons": [
+        "REJECTED: door is open"
+      ]
+    },
+    {
+      "seq": 49,
+      "command": "MOVE_TO_FLOOR",
+      "expected": "ACCEPTED",
+      "got": "REJECTED",
+      "reasons": [
+        "REJECTED: door is open"
+      ]
+    }
+  ],
+  "zero_write_invariant": {
+    "rejected_total": 32,
+    "rejected_with_skipped_writes": 32,
+    "violations": []
+  },
+  "accepted_write_status": {
+    "accepted_total": 24,
+    "accepted_with_succeeded_writes": 24,
+    "exceptions": []
+  },
+  "by_family": {
+    "accepted/status": {
+      "total": 2,
+      "accepted": 2,
+      "rejected": 0
+    },
+    "accepted/move": {
+      "total": 4,
+      "accepted": 0,
+      "rejected": 4
+    },
+    "cooldown": {
+      "total": 3,
+      "accepted": 0,
+      "rejected": 3
+    },
+    "required-fields": {
+      "total": 3,
+      "accepted": 0,
+      "rejected": 3
+    },
+    "bounds": {
+      "total": 3,
+      "accepted": 0,
+      "rejected": 2
+    },
+    "reason": {
+      "total": 2,
+      "accepted": 0,
+      "rejected": 2
+    },
+    "catalog": {
+      "total": 2,
+      "accepted": 0,
+      "rejected": 2
+    },
+    "accepted/door": {
+      "total": 3,
+      "accepted": 3,
+      "rejected": 0
+    },
+    "accepted/fan": {
+      "total": 3,
+      "accepted": 3,
+      "rejected": 0
+    },
+    "payload-validity": {
+      "total": 2,
+      "accepted": 0,
+      "rejected": 2
+    },
+    "accepted/diag": {
+      "total": 1,
+      "accepted": 1,
+      "rejected": 0
+    },
+    "confirmation": {
+      "total": 5,
+      "accepted": 0,
+      "rejected": 5
+    },
+    "accepted/policy": {
+      "total": 5,
+      "accepted": 5,
+      "rejected": 0
+    },
+    "policy-validity": {
+      "total": 1,
+      "accepted": 0,
+      "rejected": 1
+    },
+    "accepted/queue": {
+      "total": 1,
+      "accepted": 1,
+      "rejected": 0
+    },
+    "accepted/ack": {
+      "total": 1,
+      "accepted": 1,
+      "rejected": 0
+    },
+    "mode": {
+      "total": 8,
+      "accepted": 0,
+      "rejected": 8
+    },
+    "accepted/estop": {
+      "total": 1,
+      "accepted": 1,
+      "rejected": 0
+    },
+    "accepted/reset": {
+      "total": 1,
+      "accepted": 1,
+      "rejected": 0
+    },
+    "accepted/lockdown": {
+      "total": 1,
+      "accepted": 1,
+      "rejected": 0
+    },
+    "accepted/release": {
+      "total": 1,
+      "accepted": 1,
+      "rejected": 0
+    },
+    "accepted/recover": {
+      "total": 2,
+      "accepted": 2,
+      "rejected": 0
+    },
+    "accepted/maint": {
+      "total": 1,
+      "accepted": 1,
+      "rejected": 0
+    },
+    "accepted/resume": {
+      "total": 1,
+      "accepted": 1,
+      "rejected": 0
+    }
+  },
+  "by_command": {
+    "REQUEST_STATUS_REFRESH": {
+      "total": 2,
+      "accepted": 2,
+      "rejected": 0
+    },
+    "MOVE_TO_FLOOR": {
+      "total": 13,
+      "accepted": 0,
+      "rejected": 12
+    },
+    "SELF_TEST_DANCE": {
+      "total": 1,
+      "accepted": 0,
+      "rejected": 1
+    },
+    "OPEN_SHAFT_DOORS": {
+      "total": 1,
+      "accepted": 0,
+      "rejected": 1
+    },
+    "OPEN_DOOR": {
+      "total": 2,
+      "accepted": 2,
+      "rejected": 0
+    },
+    "CLOSE_DOOR": {
+      "total": 1,
+      "accepted": 1,
+      "rejected": 0
+    },
+    "SET_FAN": {
+      "total": 5,
+      "accepted": 3,
+      "rejected": 2
+    },
+    "DEVICE_DIAGNOSTIC": {
+      "total": 3,
+      "accepted": 1,
+      "rejected": 2
+    },
+    "SET_DISPATCH_POLICY": {
+      "total": 11,
+      "accepted": 5,
+      "rejected": 6
+    },
+    "CLEAR_QUEUE": {
+      "total": 1,
+      "accepted": 1,
+      "rejected": 0
+    },
+    "ACKNOWLEDGE_ALERT": {
+      "total": 1,
+      "accepted": 1,
+      "rejected": 0
+    },
+    "RESET_EMERGENCY": {
+      "total": 3,
+      "accepted": 1,
+      "rejected": 2
+    },
+    "RELEASE_LOCKDOWN": {
+      "total": 3,
+      "accepted": 1,
+      "rejected": 2
+    },
+    "RESUME_NORMAL_MODE": {
+      "total": 2,
+      "accepted": 1,
+      "rejected": 1
+    },
+    "EMERGENCY_STOP": {
+      "total": 2,
+      "accepted": 1,
+      "rejected": 1
+    },
+    "LOCKDOWN": {
+      "total": 2,
+      "accepted": 1,
+      "rejected": 1
+    },
+    "RESET_ACTIVE_PROBLEMS": {
+      "total": 2,
+      "accepted": 2,
+      "rejected": 0
+    },
+    "SET_MAINTENANCE_MODE": {
+      "total": 2,
+      "accepted": 1,
+      "rejected": 1
+    }
+  }
+}
