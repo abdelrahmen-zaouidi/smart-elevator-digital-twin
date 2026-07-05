@@ -158,6 +158,30 @@ Any credential that was ever committed or pushed (e.g. an old WiFi password)
 must be **rotated**, because git history and remote mirrors persist deleted
 content. Rotation procedures for broker users and the TLS CA are below.
 
+## Supply chain
+
+- **Dependencies** are watched by Dependabot (`.github/dependabot.yml`): npm
+  workspaces + the bridge manifest, GitHub Actions, and the Dockerfiles, weekly
+  and grouped.
+- **Container images are scanned in CI** (`.github/workflows/ci.yml`): Trivy
+  runs against the built bridge and simulator images and fails the build on
+  **CRITICAL, fixable** vulnerabilities (`ignore-unfixed: true`) — actionable,
+  not noisy.
+- **SBOMs**: CI produces SPDX SBOMs (Syft) for both images as build artifacts.
+- **Base images are digest-pinned**: `infra/docker/Dockerfile.bridge`
+  (node:20-alpine) and `Dockerfile.simulator` (python:3.11-slim) pin
+  `@sha256:…`; the compose services (mosquitto, timescaledb, n8n) are
+  digest-pinned to the running images and the opt-in tools (adminer, ollama,
+  prometheus, grafana) to specific version tags — so a rebuild is reproducible
+  and tamper-evident.
+
+### Reporting a vulnerability
+
+Report suspected vulnerabilities privately to the maintainer
+(**abdelrahmenzaouidi@gmail.com**) rather than opening a public issue. Include
+repro steps and affected component; you'll get an acknowledgement and a fix or
+mitigation timeline.
+
 ## Bench checklist (firmware bits not testable without hardware)
 
 - [ ] ESP32 completes NTP sync on your WiFi within ~8 s (`[TIME] ... ok`).

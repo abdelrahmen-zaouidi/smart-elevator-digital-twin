@@ -44,6 +44,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
     in-memory per-user+IP token-bucket rate limit (429 + Retry-After, separate
     from the gate cooldown). OpenAPI 3.1 spec at `docs/api/openapi.yaml`
     validated in CI (`npm run openapi:lint`).
+  - Supply-chain hardening: Dependabot (npm/actions/docker), CI Trivy image
+    scans (fail on CRITICAL+fixable) + Syft SPDX SBOM artifacts, digest-pinned
+    Dockerfile bases + compose images, and a SECURITY.md supply-chain +
+    vuln-reporting section.
 
 ## [1.0.0] - 2026-07-04
 

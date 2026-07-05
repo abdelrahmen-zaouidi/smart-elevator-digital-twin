@@ -75,7 +75,7 @@ jobs:
         run: npm run build
 
   docker:
-    name: Service image builds
+    name: Service image builds + scan + SBOM
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -83,6 +83,39 @@ jobs:
         run: docker build -f infra/docker/Dockerfile.bridge -t elevator-bridge:ci .
       - name: Build simulator image
         run: docker build -f infra/docker/Dockerfile.simulator -t elevator-simulator:ci .
+      # Fail only on CRITICAL vulnerabilities that have a fix available — keeps
+      # the gate actionable rather than noisy.
+      - name: Trivy scan (bridge)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: elevator-bridge:ci
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Trivy scan (simulator)
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: elevator-simulator:ci
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      # SPDX SBOMs as build artifacts (non-blocking).
+      - name: SBOM (bridge)
+        uses: anchore/sbom-action@v0
+        with:
+          image: elevator-bridge:ci
+          format: spdx-json
+          output-file: sbom-bridge.spdx.json
+      - name: SBOM (simulator)
+        uses: anchore/sbom-action@v0
+        with:
+          image: elevator-simulator:ci
+          format: spdx-json
+          output-file: sbom-simulator.spdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sboms
+          path: sbom-*.spdx.json
 
   # Playwright smoke needs a LIVE stack (Ditto + demo simulator + dashboard),
   # which the hermetic CI runners do not have. It is therefore manual-only:

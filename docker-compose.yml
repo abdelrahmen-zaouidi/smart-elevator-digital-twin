@@ -1,6 +1,7 @@
 services:
   mosquitto:
-    image: eclipse-mosquitto:2
+    # Digest-pinned to the running 2.x image (supply-chain reproducibility).
+    image: eclipse-mosquitto:2@sha256:9cfdd46ad59f3e3e5f592f6baf57ab23e1ad00605509d0f5c1e9b179c5314d87
     container_name: elevator-mqtt
     # Whole config dir is mounted (robust on Docker Desktop) and the broker is
     # pointed at elevator.conf explicitly. 8883 = TLS listener for the ESP32.
@@ -215,7 +216,8 @@ services:
       - default
 
   n8n:
-    image: docker.n8n.io/n8nio/n8n
+    # Digest-pinned to the running n8n image (was an unpinned floating tag).
+    image: docker.n8n.io/n8nio/n8n:latest@sha256:0d948060adcaf1da4a1410f3e1c071a093f7df1cce59c9d0e5f2f99eda14b322
     container_name: elevator_agents
     ports:
       - "5678:5678"
@@ -320,7 +322,9 @@ services:
       - ditto_network
 
   postgres:
-    image: timescale/timescaledb:latest-pg15
+    # Digest-pinned to the running timescaledb (2.26.3 / pg15.17); the
+    # latest-pg15 tag is retained for readability alongside the digest.
+    image: timescale/timescaledb:latest-pg15@sha256:37499832086d01518d3afc64f9d178a1f7b3a0f498750c2b6f2f2b6b5717ad9c
     container_name: elevator_db
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-admin}
@@ -351,7 +355,8 @@ services:
       - ditto_network
 
   ollama:
-    image: ollama/ollama:latest
+    # Pinned tag (opt-in `ai` profile; not running by default so no local digest).
+    image: ollama/ollama:0.5.4
     container_name: elevator_ollama
     profiles: ["ai"]
     ports:
@@ -374,7 +379,8 @@ services:
       - ditto_network
 
   adminer:
-    image: adminer:latest
+    # Pinned tag (opt-in `tools` profile; not running by default).
+    image: adminer:4.8.1
     container_name: elevator_adminer
     profiles: ["tools"]
     ports:
