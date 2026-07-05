@@ -61,10 +61,24 @@ CI runs it on every push/PR; run it locally before opening a PR:
 npm run validate
 ```
 
-which is: safety-gate + dispatch + command-lifecycle node suites, n8n
-workflow package validation, simulator unit tests, MQTT topic hygiene,
-dashboard typecheck + lint. All must pass (lint: **0 errors**; the existing
-warnings are the accepted baseline — don't add new ones).
+which is: safety-gate + dispatch + command-lifecycle node suites, dashboard
+Vitest unit + route tests, n8n workflow package validation, simulator unit
+tests, MQTT topic hygiene, dashboard typecheck + lint. All must pass (lint:
+**0 errors**; the existing warnings are the accepted baseline — don't add
+new ones).
+
+**End-to-end smoke (optional, needs a live stack):** Playwright drives the
+real dashboard. It is not part of `npm run validate` or push CI (the runners
+have no Ditto stack). Run it locally after bringing up demo mode + the dev
+server:
+
+```bash
+docker compose --profile demo up -d          # + the Ditto stack
+cd apps/dashboard && npm run dev              # in another shell
+# if the demo Basic-Auth gate is set in .env.local, export creds:
+#   E2E_BASIC_USER / E2E_BASIC_PASS
+npm run e2e --workspace apps/dashboard        # first time: npx playwright install chromium
+```
 
 If your change has a runtime surface, demonstrate it: paste the relevant
 command + output (or a screenshot for UI) in the PR. Claims follow the

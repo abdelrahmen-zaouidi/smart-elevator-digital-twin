@@ -12,6 +12,7 @@ on:
     branches: [main, "feat/**"]
   pull_request:
     branches: [main]
+  workflow_dispatch: {}
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -80,3 +81,28 @@ jobs:
         run: docker build -f infra/docker/Dockerfile.bridge -t elevator-bridge:ci .
       - name: Build simulator image
         run: docker build -f infra/docker/Dockerfile.simulator -t elevator-simulator:ci .
+
+  # Playwright smoke needs a LIVE stack (Ditto + demo simulator + dashboard),
+  # which the hermetic CI runners do not have. It is therefore manual-only:
+  # trigger from the Actions tab. This job documents the runbook; it starts the
+  # in-repo stack but NOT the external Ditto stack, so it is expected to be run
+  # against an environment where Ditto is reachable. Left as a placeholder gate
+  # so the smoke command lives in CI without blocking push builds.
+  e2e-smoke:
+    name: Playwright smoke (manual, needs live stack)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Smoke (requires E2E_BASE_URL to a reachable ElevatorOS)
+        run: npm run e2e --workspace apps/dashboard
+        env:
+          E2E_BASE_URL: ${{ vars.E2E_BASE_URL }}
+          E2E_BASIC_USER: ${{ secrets.E2E_BASIC_USER }}
+          E2E_BASIC_PASS: ${{ secrets.E2E_BASIC_PASS }}

@@ -63,6 +63,11 @@ desktop.ini
 # Local backups produced by scripts/backup.ps1 (contain DB dumps + MQTT secrets)
 backups/
 
+# Playwright artifacts (smoke tests run against a live local stack)
+test-results/
+playwright-report/
+**/.playwright/
+
 # Presentation / thesis media working directories (not part of the platform)
 _pptx_media/
 photo/
